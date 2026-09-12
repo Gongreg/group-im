@@ -124,8 +124,14 @@
   body:not(.view-quests) tbody tr:nth-child(even) td, tr.alt td { background: rgba(96,68,22,.07); }
   tr.q.has-items { cursor: pointer; }
   .reqs { margin-bottom: 4px; }
+  .reqs .lbl { display: inline-block; min-width: 92px; color: var(--muted); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .3px; }
   .reqline { display: inline-block; margin-right: 14px; }
   .reqline small { color: var(--muted); }
+  .reqs.rw .lbl { vertical-align: top; }
+  .rwline { display: inline-block; max-width: 900px; vertical-align: top; }
+  .rwline + .rwline { display: block; margin-left: 92px; }
+  .rwline a { color: var(--accent); }
+  tr.detail td { padding-top: 6px; }
   .tw { display: inline-block; width: 14px; color: var(--muted); font-size: 11px; }
   tr.open td { border-bottom: none; }
   tr.detail td { white-space: normal; padding: 0 10px 10px 34px; }
@@ -325,6 +331,9 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 const wikiUrl = title => `${WIKI_BASE}/w/${encodeURIComponent(title.replace(/ /g, '_'))}`;
 const questLink = q => q.url ? `<a href="${esc(q.url)}" target="_blank" rel="noopener">${esc(q.name)}</a>` : esc(q.name);
 const tipAttr = html => html ? ` data-tip="${esc(html)}"` : '';  // html tooltip, see the tooltip section
+// a reward line from the wiki, with its [[page|text]] links made clickable
+const wikiLine = text => esc(text).replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,
+  (m, page, label) => `<a href="${esc(wikiUrl(page.replace(/&#39;/g, "'").replace(/&amp;/g, '&')))}" target="_blank" rel="noopener">${label || page}</a>`);
 
 // ---------- parsing ----------
 function parseQuestHtml(html) {
@@ -515,6 +524,16 @@ function renderItemInline(entry) {
   return `<span class="${cls}"${tipAttr(esc(title))}><a href="${esc(wikiUrl(item.page))}" target="_blank" rel="noopener">${esc(item.name)}</a>${qty ? `<span class="qty"> ×${qty.toLocaleString()}</span>` : ''}</span>`;
 }
 
+// rewards, most useful first: items and unlocks, xp, what the quest is a prerequisite for, quest points
+function renderRewards(q) {
+  const parts = [];
+  if (q.rewards.length) parts.push(`<div class="reqs rw"><span class="lbl">Rewards</span>${q.rewards.map(l => `<div class="rwline">${wikiLine(l)}</div>`).join('')}</div>`);
+  if (q.xp.length) parts.push(`<div class="reqs"><span class="lbl">XP</span>${q.xp.map(([k, n]) => `<span class="reqline">${icon(k, '')}${esc(k)} <b>${n.toLocaleString()}</b></span>`).join('')}</div>`);
+  if (q.unlocks.length) parts.push(`<div class="reqs"><span class="lbl">Needed for</span>${q.unlocks.map(u => `<span class="reqline">${questLink(u)}</span>`).join('')}</div>`);
+  if (q.type === 'quest') parts.push(`<div class="reqs"><span class="lbl">Quest points</span><span class="reqline">${icon('Quest point', '')}<b>${q.qp}</b></span></div>`);
+  return parts.join('');
+}
+
 function renderQuests() {
   const { key, dir } = state.sort.quests;
   const { q, hideDone, showMini } = state.filter;
@@ -564,7 +583,8 @@ function renderQuests() {
       <td class="num">${qst.items.length || '–'}</td>
     </tr>` + (open ? `<tr class="detail${i % 2 ? ' alt' : ''}"><td colspan="${QUEST_COLUMNS.length}">${
         qst.reqs.length ? `<div class="reqs">${qst.reqs.map(r => `<span class="reqline">${icon(r.skill === 'Quest' ? 'Quest point' : r.skill, '')}${esc(reqLabel(r))}${'or' in r ? ' <small>(either)</small>' : ''}</span>`).join('')}</div>` : ''
-      }${items.map(renderItemInline).join('') || '<span class="item untradeable">no items</span>'}</td></tr>` : '');
+      }${qst.prereqs.length ? `<div class="reqs"><span class="lbl">Quests</span>${qst.prereqs.map(p => `<span class="reqline">${questLink(p)}</span>`).join('')}</div>` : ''
+      }<div class="reqs"><span class="lbl">Items</span>${items.map(renderItemInline).join('') || '<span class="item untradeable">none</span>'}</div>${renderRewards(qst)}</td></tr>` : '');
   }).join('');
 
   document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${rows}</tbody>`;
@@ -1252,7 +1272,20 @@ function init() {
   }
   state.skills = collectSkills();
   const reqs = new Map(Object.entries(data.reqs || {}).map(([k, v]) => [norm(k), v]));
-  for (const q of state.quests) q.reqs = reqs.get(norm(q.page)) || [];
+  const info = new Map(Object.entries(data.questInfo || {}).map(([k, v]) => [norm(k), v]));
+  const byPage = new Map(state.quests.map(q => [norm(q.page), q]));
+  for (const q of state.quests) {
+    q.reqs = reqs.get(norm(q.page)) || [];
+    const i = info.get(norm(q.page)) || {};
+    q.prereqs = (i.prereqs || []).map(t => byPage.get(norm(t))).filter(Boolean);
+    q.unlocks = (i.requiredFor || []).map(t => byPage.get(norm(t))).filter(Boolean);
+    q.xp = i.xp || [];
+    q.rewards = i.rewards || [];
+  }
+  // the two sources of the prerequisite graph (each page's requirements, and each page's
+  // "required for completing" list) are merged so both directions agree
+  const link = (pre, q) => { if (!pre.unlocks.includes(q)) pre.unlocks.push(q); if (!q.prereqs.includes(pre)) q.prereqs.push(pre); };
+  for (const q of state.quests) { for (const pre of q.prereqs.slice()) link(pre, q); for (const u of q.unlocks.slice()) link(q, u); }
   // the status line only speaks up when something is wrong
   const unlinked = state.items.flatMap(it => it.needed).filter(n => !n.quest).length;
   if (unlinked) setStatus(`${unlinked} item→quest links could not be matched.`, true);

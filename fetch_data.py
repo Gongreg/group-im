@@ -7,7 +7,7 @@
   - Quest completion per player (WikiSync; only for players with the plugin)
   - Levels, XP, clue counts and boss kill counts per player (official hiscores; live)
   - Number of combat achievement tasks (wiki), so the stats tab can show a fraction
-  - Skill requirements per quest (from each quest page's infobox wikitext)
+  - Skill requirements, prerequisite quests and rewards per quest (from each quest page's wikitext)
   - Collection log history: WikiSync lists the log in a fixed order, so when each item
     was gained is recorded here by diffing against the previous run (HISTORY file)
 
@@ -304,8 +304,91 @@ def parse_reqs(wikitext):
     return reqs
 
 
+XP_RE = re.compile(r"\{\{SCP\|([A-Za-z ]+)\|([\d,]+)[^}]*\}\}", re.I)
+
+
+def clean_wikitext(line: str) -> str:
+    """A reward line as text, keeping [[links]] for the page to render."""
+    line = re.sub(r"\{\{SCP\|([^|}]+)(?:\|[^}]*)?\}\}", r"\1", line)  # {{SCP|Attack|...}} -> Attack
+    line = re.sub(r"\{\{[^{}]*\}\}", "", line)
+    line = re.sub(r"\[\[File:[^\]]*\]\]", "", line)
+    line = re.sub(r"<[^>]+>|'{2,3}", "", line)
+    return re.sub(r"\s+", " ", line).strip(" *:")
+
+
+def parse_quest_page(wikitext, quest_titles):
+    """Direct prerequisite quests and rewards (xp per skill, and everything else as lines)."""
+    prereqs = []
+    m = re.search(r"\|\s*requirements\s*=(.*?)(?=\n\|\s*[a-z]+\s*=|\n\}\})", wikitext, re.S | re.I)
+    if m:
+        # a quest link is a sub-prerequisite (skip it) when the bullet it nests under is itself a quest
+        stack = []  # (depth, is_quest_line) of the enclosing bullets
+        for line in m.group(1).split("\n"):
+            bullets = re.match(r"\s*(\*+)", line)
+            if not bullets:
+                continue
+            depth = len(bullets.group(1))
+            links = [t for t in re.findall(r"\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]", line) if t in quest_titles]
+            while stack and stack[-1][0] >= depth:
+                stack.pop()
+            nested = bool(stack) and stack[-1][1]
+            if links and not nested:
+                prereqs.extend(t for t in links if t not in prereqs)
+            stack.append((depth, bool(links)))
+    xp, other = [], []
+    body = rewards_block(wikitext)
+    if body:
+        for line in body.split("\n"):
+            if not line.strip().startswith("*"):
+                continue
+            amounts = XP_RE.findall(line)
+            if amounts and re.search(r"experience|\bxp\b", line, re.I):
+                xp.extend([skill.strip(), int(n.replace(",", ""))] for skill, n in amounts)
+            elif not re.search(r"quest point", line, re.I):
+                text = clean_wikitext(line)
+                if text:
+                    other.append(text)
+    # the page's own list of what needs this quest - a second source for the prerequisite graph
+    required_for = []
+    m = re.search(r"==\s*Required for completing\s*==(.*?)(?=\n==[^=]|\Z)", wikitext, re.S | re.I)
+    if m:
+        required_for = [t for t in re.findall(r"\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]", m.group(1)) if t in quest_titles]
+    return {"prereqs": prereqs, "requiredFor": required_for, "xp": xp, "rewards": other}
+
+
+def rewards_block(wikitext):
+    """The bullet list of rewards: the {{Quest rewards}} template's |rewards= (matched by
+    brace depth, since the closing braces often share the last bullet's line, plus any
+    bullets that spill out right after it), or a plain ==Rewards== section on miniquests."""
+    start = wikitext.find("{{Quest rewards")
+    if start >= 0:
+        depth, i = 0, start
+        while i < len(wikitext):
+            if wikitext.startswith("{{", i):
+                depth += 1
+                i += 2
+            elif wikitext.startswith("}}", i):
+                depth -= 1
+                i += 2
+                if depth == 0:
+                    break
+            else:
+                i += 1
+        template = wikitext[start:i]
+        r = re.search(r"\|\s*rewards\s*=(.*)", template, re.S)
+        body = r.group(1)[:-2] if r else ""
+        tail = re.match(r"((?:\s*\*[^\n]*\n?)+)", wikitext[i:])
+        if tail:
+            body += "\n" + tail.group(1)
+        return body
+    m = re.search(r"==\s*Rewards?\s*==(.*?)(?=\n==[^=]|\Z)", wikitext, re.S | re.I)
+    return m.group(1) if m else ""
+
+
 def fetch_reqs(titles):
-    """Wikitext for every quest page, reduced to its skill requirements."""
+    """Wikitext for every quest page: skill requirements, plus prerequisites and rewards."""
+    known = set(titles)
+    info = {}
     reqs = {}
     for i in range(0, len(titles), 20):
         batch = titles[i:i + 20]
@@ -322,10 +405,12 @@ def fetch_reqs(titles):
             final = alias.get(alias.get(t, t), alias.get(t, t))
             if final in content:
                 reqs[t] = parse_reqs(content[final])
+                info[t] = parse_quest_page(content[final], known)
         time.sleep(0.3)
     with_reqs = sum(1 for v in reqs.values() if v)
-    print(f"  {len(reqs)}/{len(titles)} quest pages, {with_reqs} with skill requirements")
-    return reqs
+    with_rewards = sum(1 for v in info.values() if v["xp"] or v["rewards"])
+    print(f"  {len(reqs)}/{len(titles)} quest pages, {with_reqs} with skill requirements, {with_rewards} with rewards")
+    return reqs, info
 
 
 def fetch_bytes(url: str):
@@ -409,7 +494,7 @@ def main() -> int:
     fetch_tradeability(items)
 
     print("Fetching quest skill requirements...")
-    reqs = fetch_reqs(quest_titles(list_html))
+    reqs, quest_info = fetch_reqs(quest_titles(list_html))
 
     print("Fetching combat achievement count...")
     ca_total = fetch_ca_total()
@@ -432,6 +517,7 @@ def main() -> int:
         "stats": stats,
         "caTotal": ca_total,
         "reqs": reqs,
+        "questInfo": quest_info,
         "clog": clog,
     }
     js = "window.QUEST_DATA = " + json.dumps(payload).replace("</", "<\\/") + ";\n"
