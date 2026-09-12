@@ -5,10 +5,13 @@
   - Required items per quest (wiki page "Required Quest Item Totals", parsed here)
   - Tradeability of each item (wiki categories)
   - Quest completion per player (WikiSync; only for players with the plugin)
+  - Levels and XP per player (official hiscores; live, unlike WikiSync)
+  - Skill icons, inlined as data URIs so the page needs no external assets
 
 Usage: python3 fetch_data.py
 Only stdlib is used.
 """
+import base64
 import json
 import re
 import sys
@@ -20,8 +23,18 @@ from html.parser import HTMLParser
 
 PLAYERS = ["gaudyk", "uncle sacks", "Moms klit", "knysliukas", "cluescrollas"]
 
+# in-game skill-tab order; index.html lays the stats table out the same way
+SKILLS = [
+    "Attack", "Hitpoints", "Mining", "Strength", "Agility", "Smithing",
+    "Defence", "Herblore", "Fishing", "Ranged", "Thieving", "Cooking",
+    "Prayer", "Crafting", "Firemaking", "Magic", "Fletching", "Woodcutting",
+    "Runecraft", "Slayer", "Farming", "Construction", "Hunter", "Sailing",
+]
+
 WIKI_API = "https://oldschool.runescape.wiki/api.php"
+WIKI_IMAGES = "https://oldschool.runescape.wiki/images/"
 SYNC_URL = "https://sync.runescape.wiki/runelite/player/{name}/STANDARD"
+HISCORES_URL = "https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player={name}"
 USER_AGENT = "osrs-quest-tracker/1.1 (personal tool for a friend group)"
 
 
@@ -168,7 +181,7 @@ def fetch_tradeability(items):
     for i in range(0, len(titles), 50):
         batch = titles[i:i + 50]
         data = api(
-            action="query", prop="categories", redirects="1",
+            action="query", prop="categories", redirects="1", cllimit="max",
             clcategories="Category:Tradeable items|Category:Untradeable items",
             titles="|".join(batch),
         )["query"]
@@ -214,6 +227,55 @@ def fetch_players():
     return players
 
 
+def fetch_stats():
+    """Levels and XP from the official hiscores.
+
+    WikiSync only knows what it saw at the player's last login with the plugin,
+    so the hiscores are the fresher source for levels; they also carry XP.
+    Unranked accounts still return rows (rank -1), so a new group works fine.
+    """
+    stats = {}
+    for name in PLAYERS:
+        url = HISCORES_URL.format(name=urllib.parse.quote(name))
+        try:
+            skills = {
+                s["name"]: {"level": s["level"], "xp": s["xp"]}
+                for s in get_json(url).get("skills", [])
+                if s.get("level", -1) >= 0
+            }
+            overall = skills.pop("Overall", None)
+            stats[name] = {"skills": skills, "overall": overall}
+            total = overall["level"] if overall else "?"
+            xp = f"{overall['xp']:,}" if overall else "?"
+            print(f"  {name}: total level {total}, {xp} xp")
+        except urllib.error.HTTPError as e:
+            print(f"  {name}: HTTP {e.code} (not on the hiscores?)")
+            stats[name] = None
+        except Exception as e:  # noqa: BLE001
+            print(f"  {name}: {e}")
+            stats[name] = None
+        time.sleep(0.5)
+    return stats
+
+
+def fetch_icons():
+    """Skill icons from the wiki as data URIs (a few hundred bytes each)."""
+    wanted = [(s, s.replace(" ", "_") + "_icon.png") for s in SKILLS]
+    wanted.append(("Quest point", "Quest_point_icon.png"))
+    icons = {}
+    for key, filename in wanted:
+        try:
+            req = urllib.request.Request(WIKI_IMAGES + filename, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                blob = resp.read()
+            icons[key] = "data:image/png;base64," + base64.b64encode(blob).decode()
+        except Exception as e:  # noqa: BLE001
+            print(f"  {filename}: {e}")
+        time.sleep(0.1)
+    print(f"  {len(icons)}/{len(wanted)} icons, {sum(map(len, icons.values())) // 1024} KB")
+    return icons
+
+
 def main() -> int:
     print("Fetching quest list...")
     list_html = page_html("Quests/List")
@@ -221,14 +283,22 @@ def main() -> int:
     items = fetch_items()
     fetch_tradeability(items)
 
-    print("Fetching player data...")
+    print("Fetching icons...")
+    icons = fetch_icons()
+
+    print("Fetching player quests...")
     players = fetch_players()
+
+    print("Fetching player stats...")
+    stats = fetch_stats()
 
     payload = {
         "fetchedAt": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "listHtml": list_html,
         "items": items,
         "players": players,
+        "stats": stats,
+        "icons": icons,
     }
     js = "window.QUEST_DATA = " + json.dumps(payload).replace("</", "<\\/") + ";\n"
     with open("data.js", "w", encoding="utf-8") as f:

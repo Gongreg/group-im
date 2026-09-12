@@ -5,78 +5,143 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OSRS quest tracker</title>
 <style>
+  /* Textures are the real ones from the OSRS site and hiscores (see assets/).
+     Type follows oldschool.runescape.com: bold Arial, white on stone, black on parchment.
+     The in-game pixel font is decorative only - it is hard to read at body sizes. */
+  @font-face { font-family: 'RuneScape'; src: url(assets/runescape_bold.ttf) format('truetype'); font-weight: 700; }
   :root {
-    --bg: #f7f5ef;
-    --paper: #ffffff;
-    --ink: #1f1d18;
-    --muted: #6d675c;
-    --line: #dcd6c8;
-    --ok: #2e7d32;   --ok-bg: #e4f2e5;
-    --mid: #b26a00;  --mid-bg: #fff1d6;
-    --no: #b23a2e;   --no-bg: #f9e4e1;
-    --unk: #9a948a;  --unk-bg: #eeebe3;
-    --accent: #3b4f8a;
+    --ink: #171004; --muted: #6a5324; --line: rgba(88,62,22,.30);
+    --band: #d5bf8d;
+    --white: #fff; --dim: #cfc7b4; --green: #97cf46;
+    --ok: #1c6a12;   --ok-bg: rgba(60,140,40,.26);
+    --mid: #8a5400;  --mid-bg: rgba(200,140,20,.30);
+    --no: #92200f;   --no-bg: rgba(175,55,35,.24);
+    --unk: #6f6041;  --unk-bg: rgba(95,78,45,.20);
+    --accent: #8f4a08;
+    --bar: rgba(110,78,28,.26);
+    --sum-bg: rgba(150,115,50,.20);
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--ink);
-    font: 14px/1.4 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-  header { padding: 20px 24px 12px; display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
-  h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  html { background: #000; }
+  body { margin: 0; color: var(--ink);
+    font: 14px/1.45 Arial, Helvetica, sans-serif;
+    background: #000 url(assets/bg2.jpg) repeat-y top center;
+    background-size: 100% auto;
+  }
+  /* everything sitting on the stone reads white, the way the real site does */
+  header, .tabs, .controls, #status { color: var(--white); }
+
+  /* ---- riveted stone plate: the button art from the hiscores, 9-sliced so it scales ---- */
+  .chip, button {
+    background: none; color: var(--white);
+    font: 700 14px/1 Arial, Helvetica, sans-serif;
+    text-shadow: 1px 1px 2px #000, 0 0 4px rgba(0,0,0,.8);
+    border: 10px solid transparent;
+    border-image: url(assets/stone_button.gif) 10 fill / 10px / 0 round;
+  }
+
+  header { padding: 20px 24px 12px; display: flex; flex-wrap: wrap; gap: 12px 22px; align-items: center; }
+  h1 { font-family: 'RuneScape', Arial, sans-serif; font-size: 32px; line-height: 1;
+    -webkit-font-smoothing: none; font-smooth: never;
+    margin: 0; font-weight: 700; color: #ffd964; text-shadow: 2px 2px 0 #000; }
   .players { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
-    background: var(--paper); border: 1px solid var(--line); }
-  .chip b { font-weight: 600; }
-  .chip .count { color: var(--muted); font-variant-numeric: tabular-nums; }
-  .chip.error { border-color: var(--no); color: var(--no); }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px; }
+  .chip .count { color: var(--green); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chip.error { color: #ff9f8c; }
 
-  .tabs { display: flex; gap: 4px; padding: 0 24px; }
-  .tabs button { border-radius: 6px 6px 0 0; border-bottom: none; background: var(--bg); }
-  .tabs button.active { background: var(--paper); font-weight: 600; }
+  .tabs { display: flex; gap: 6px; padding: 4px 24px 0; }
+  .tabs button { padding: 8px 14px; color: var(--dim); }
+  .tabs button:hover { color: var(--white); }
+  .tabs button.active { color: #ffd964; filter: brightness(1.5) contrast(.95); }
 
-  .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; padding: 12px 24px; }
-  .controls input[type=search] { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; min-width: 220px; font: inherit; }
-  .controls label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
-  .controls .only-quests, .controls .only-items { display: none; }
-  body.view-quests .only-quests, body.view-items .only-items { display: inline-flex; }
-  button { font: inherit; padding: 6px 12px; border: 1px solid var(--line); background: var(--paper); border-radius: 6px; cursor: pointer; }
-  button:hover { border-color: var(--accent); }
-  #status { padding: 0 24px 12px; color: var(--muted); }
-  #status .err { color: var(--no); }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding: 14px 24px 8px; }
+  .controls input[type=search] {
+    padding: 7px 10px; min-width: 220px; font: 700 14px Arial, Helvetica, sans-serif; color: #1d1508;
+    background: #efe7d2; border: 2px solid #0d0a05; border-radius: 2px;
+    box-shadow: inset 0 2px 4px rgba(70,50,20,.45), 0 0 0 1px #6f6552;
+  }
+  .controls input[type=search]::placeholder { color: #7d7159; font-weight: 400; }
+  .controls label { display: inline-flex; gap: 7px; align-items: center; cursor: pointer;
+    color: var(--white); font-weight: 700; text-shadow: 1px 1px 2px #000; }
+  .controls input[type=checkbox] { accent-color: #6b8f2c; width: 16px; height: 16px; }
+  .controls .only-quests, .controls .only-items, .controls .only-stats { display: none; }
+  body.view-quests .only-quests, body.view-items .only-items, body.view-stats .only-stats { display: inline-flex; }
+  button { cursor: pointer; }
+  button:hover { filter: brightness(1.3); }
+  .tabs button.active:hover { filter: brightness(1.6) contrast(.95); }
+  #status { padding: 2px 24px 14px; color: var(--dim); text-shadow: 1px 1px 2px #000; }
+  #status .err { color: #ff9f8c; font-weight: 700; }
 
-  .wrap { padding: 0 24px 40px; overflow-x: auto; }
-  table { border-collapse: collapse; background: var(--paper); border: 1px solid var(--line); width: 100%; }
-  th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: top; }
-  th { position: sticky; top: 0; background: var(--paper); cursor: pointer; user-select: none; font-weight: 600; z-index: 1; }
+  /* ---- the scroll the tables sit on ---- */
+  .wrap {
+    margin: 0 22px 44px; padding: 38px 20px 40px; overflow-x: auto;
+    background-color: #e6d8b2;
+    /* the cream wash sits above the paper texture: stretched over a tall table it
+       goes muddy, and dark text needs the contrast back */
+    background-image: url(assets/scroll_top.gif), url(assets/scroll_bottom.gif),
+      linear-gradient(rgba(255,250,231,.45), rgba(255,250,231,.45)), url(assets/scroll_middle.gif);
+    background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+    background-position: top center, bottom center, center, center;
+    background-size: 100% 34px, 100% 34px, 100% 100%, 100% 100%;
+    filter: drop-shadow(0 6px 14px rgba(0,0,0,.6));
+  }
+  table { border-collapse: collapse; width: 100%; background: transparent; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: top; }
+  td { font-weight: 600; }
+  th { position: sticky; top: 0; z-index: 1; cursor: pointer; user-select: none; font-weight: 700;
+    color: var(--ink); background: var(--band); letter-spacing: .2px;
+    border-bottom: 2px solid rgba(70,48,14,.7); box-shadow: inset 0 1px 0 rgba(255,252,238,.5); }
   th:hover { color: var(--accent); }
   th .dir { color: var(--accent); margin-left: 4px; }
+  tbody tr:nth-child(even) td { background: rgba(96,68,22,.07); }
+  tbody tr:hover td { background: rgba(255,246,206,.75); }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   td.st, th.st { text-align: center; }
   td.wrap-cell { white-space: normal; min-width: 260px; max-width: 520px; }
   td a { color: var(--ink); text-decoration: none; }
-  td a:hover { text-decoration: underline; }
+  td a:hover { color: var(--accent); text-decoration: underline; }
   tr.mini td:first-child { color: var(--muted); }
-  .mark { display: inline-block; min-width: 26px; padding: 1px 6px; border-radius: 4px; font-weight: 600; text-align: center; }
+  .mark { display: inline-block; min-width: 24px; padding: 2px 6px; border-radius: 3px;
+    font-weight: 700; font-size: 13px; text-align: center; }
   .m2 { color: var(--ok); background: var(--ok-bg); }
   .m1 { color: var(--mid); background: var(--mid-bg); }
   .m0 { color: var(--no); background: var(--no-bg); }
   .mx { color: var(--unk); background: var(--unk-bg); }
-  tr.all-done td { opacity: .55; }
 
   .item { display: inline; }
   .item.untradeable { color: var(--muted); }
   .item.acquired { font-style: italic; color: var(--muted); }
-  .item .qty { color: var(--muted); }
+  .item .qty { color: var(--muted); font-weight: 400; }
   .item + .item::before { content: ", "; }
 
-  .tag { display: inline-block; padding: 1px 8px; border-radius: 4px; font-weight: 600; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-weight: 700; }
   .keep { color: var(--ok); background: var(--ok-bg); }
   .retire { color: var(--no); background: var(--no-bg); }
   .skip { color: var(--mid); background: var(--mid-bg); }
   .untr { color: var(--unk); background: var(--unk-bg); }
   .qref { display: inline-block; margin: 1px 6px 1px 0; }
-  .qref .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .qref .n { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
   .qref.done { color: var(--muted); text-decoration: line-through; }
-  .legend { color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+  .legend { color: var(--white); display: flex; gap: 8px 16px; flex-wrap: wrap;
+    text-shadow: 1px 1px 2px #000; }
+  .legend b { font-weight: 700; }
+  .legend .mark, .legend .tag { text-shadow: none; background-color: #e6d8b2; }
+
+  /* ---- stats ---- */
+  .icon { width: 18px; height: 18px; object-fit: contain; image-rendering: pixelated;
+    vertical-align: -4px; margin-right: 7px; }
+  th .icon { margin-right: 5px; }
+  td.lv, th.lv { position: relative; text-align: right; font-variant-numeric: tabular-nums; }
+  /* right-anchored so each bar ends at its own number rather than the next column's */
+  td.lv .bar { position: absolute; right: 0; top: 2px; bottom: 2px; background: var(--bar); border-radius: 2px 0 0 2px; }
+  td.lv .v { position: relative; }
+  td.lv .v.best { color: var(--ok); font-weight: 700; }
+  td.lv .v.none { color: var(--unk); }
+  tr.sum td { background: var(--sum-bg); }
+  tr.sum td:first-child { font-weight: 700; }
+  tr.sum.last td { border-bottom: 2px solid rgba(70,48,14,.7); }
+  tr.sum:hover td { background: rgba(255,246,206,.75); }
+  td.lv .frac { color: var(--muted); font-weight: 400; }
 </style>
 </head>
 <body class="view-quests">
@@ -89,6 +154,7 @@
 <div class="tabs">
   <button data-view="quests" class="active">Quests</button>
   <button data-view="items">Items &amp; group storage</button>
+  <button data-view="stats">Stats</button>
 </div>
 
 <div class="controls">
@@ -97,12 +163,18 @@
   <label class="only-quests"><input type="checkbox" id="showMini" checked> Include miniquests</label>
   <label class="only-items"><input type="checkbox" id="tradeableOnly" checked> Tradeable only</label>
   <label class="only-items"><input type="checkbox" id="hideRetired"> Hide retired</label>
+  <label class="only-stats"><input type="checkbox" id="showXp"> Show XP instead of levels</label>
   <span class="legend only-quests">
     <span><span class="mark m2">✓</span> done</span>
     <span><span class="mark m1">◐</span> in progress</span>
     <span><span class="mark m0">✗</span> not started</span>
     <span><span class="mark mx">–</span> no data</span>
     <span><i>italic item</i> = obtained during the quest</span>
+  </span>
+  <span class="legend only-stats">
+    <span>Levels and XP come from the hiscores (live); everything else from each player's last WikiSync.</span>
+    <span><b>Lowest</b> is what gates the group, <b>spread</b> is how uneven it is.</span>
+    <span>The <b>Skill</b> column sorts in in-game order.</span>
   </span>
   <span class="legend only-items">
     <span><span class="tag keep">Keep</span> a pending quest still needs it</span>
@@ -132,12 +204,17 @@ const state = {
   view: 'quests',
   quests: [],        // { name, url, type, members, difficulty, length, qp, series, release, items: [] }
   items: [],         // { name, page, reusable, total, tradeable, needed: [{ page, qty, acquired, quest }] }
-  players: {},       // name -> { status, quests: { normName -> 0|1|2 } }
-  sort: { quests: { key: 'done', dir: -1 }, items: { key: 'status', dir: 1 } },
-  filter: { q: '', hideDone: false, showMini: true, tradeableOnly: true, hideRetired: false },
+  players: {},       // name -> { status, quests: { normName -> 0|1|2 }, skills: { skill -> { level, xp } }, raw }
+  skills: [],        // ordered skill names present in the data
+  sort: { quests: { key: 'done', dir: -1 }, items: { key: 'status', dir: 1 }, stats: { key: 'skill', dir: 1 } },
+  filter: { q: '', hideDone: false, showMini: true, tradeableOnly: true, hideRetired: false, showXp: false },
 };
 
 const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+const icon = (name, alt) => {
+  const src = (window.QUEST_DATA && window.QUEST_DATA.icons || {})[name];
+  return src ? `<img class="icon" src="${src}" alt="${esc(alt == null ? name : alt)}">` : '';
+};
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const wikiUrl = title => `${WIKI_BASE}/w/${encodeURIComponent(title.replace(/ /g, '_'))}`;
 
@@ -195,10 +272,21 @@ function linkItems() {
   }
 }
 
-function ingestPlayerJson(name, data) {
-  const map = {};
-  for (const [k, v] of Object.entries(data.quests || {})) map[norm(k)] = v;
-  state.players[name] = { status: 'ok', quests: map };
+function ingestPlayer(name, sync, stats) {
+  const rec = { status: 'error', error: 'No WikiSync data for this player', quests: {}, raw: sync, skills: null, overall: null };
+  if (sync && sync.quests) {
+    rec.status = 'ok';
+    rec.error = '';
+    for (const [k, v] of Object.entries(sync.quests)) rec.quests[norm(k)] = v;
+  }
+  // Hiscores are live; WikiSync levels are only as fresh as the last plugin login.
+  if (stats && stats.skills) {
+    rec.skills = stats.skills;
+    rec.overall = stats.overall || null;
+  } else if (sync && sync.levels) {
+    rec.skills = Object.fromEntries(Object.entries(sync.levels).map(([k, v]) => [k, { level: v, xp: null }]));
+  }
+  state.players[name] = rec;
 }
 
 // ---------- derived values ----------
@@ -247,7 +335,7 @@ const QUEST_COLUMNS = [
   { key: 'name', label: 'Quest' },
   { key: 'difficulty', label: 'Difficulty' },
   { key: 'length', label: 'Length' },
-  { key: 'qp', label: 'QP', cls: 'num' },
+  { key: 'qp', label: 'QP', cls: 'num', ico: 'Quest point' },
   { key: 'done', label: 'Done by', cls: 'num' },
   ...PLAYERS.map((p, i) => ({ key: 'p' + i, label: p, cls: 'st' })),
   { key: 'items', label: 'Items required', cls: 'wrap-cell' },
@@ -290,7 +378,7 @@ function renderQuests() {
   });
 
   const head = QUEST_COLUMNS.map(c =>
-    `<th class="${c.cls || ''}" data-key="${c.key}">${esc(c.label)}${c.key === key ? `<span class="dir">${dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`).join('');
+    `<th class="${c.cls || ''}" data-key="${c.key}">${c.ico ? icon(c.ico, '') : ''}${esc(c.label)}${c.key === key ? `<span class="dir">${dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`).join('');
 
   const rows = list.map(qst => {
     const done = doneCount(qst);
@@ -375,7 +463,184 @@ function renderItems() {
   document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${rows}</tbody>`;
 }
 
-function render() { state.view === 'quests' ? renderQuests() : renderItems(); }
+// ---------- stats ----------
+const SKILL_ORDER = ['Attack', 'Hitpoints', 'Mining', 'Strength', 'Agility', 'Smithing',
+  'Defence', 'Herblore', 'Fishing', 'Ranged', 'Thieving', 'Cooking', 'Prayer', 'Crafting',
+  'Firemaking', 'Magic', 'Fletching', 'Woodcutting', 'Runecraft', 'Slayer', 'Farming',
+  'Construction', 'Hunter', 'Sailing'];
+const MAX_LEVEL = 99;
+
+const fmtXp = n => n == null ? '–'
+  : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M'
+  : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k'
+  : n.toLocaleString();
+
+function collectSkills() {
+  const seen = new Set();
+  for (const p of PLAYERS) {
+    const s = state.players[p].skills;
+    if (s) for (const k of Object.keys(s)) seen.add(k);
+  }
+  return [...SKILL_ORDER.filter(k => seen.has(k)), ...[...seen].filter(k => !SKILL_ORDER.includes(k)).sort()];
+}
+
+const skillOf = (player, skill) => (state.players[player].skills || {})[skill] || null;
+
+function combatLevel(skills) {
+  const g = k => (skills[k] ? skills[k].level : 1);
+  const base = 0.25 * (g('Defence') + g('Hitpoints') + Math.floor(g('Prayer') / 2));
+  const melee = 0.325 * (g('Attack') + g('Strength'));
+  const ranged = 0.325 * Math.floor(g('Ranged') * 1.5);
+  const magic = 0.325 * Math.floor(g('Magic') * 1.5);
+  return Math.floor(base + Math.max(melee, ranged, magic));
+}
+
+// value + display for one summary row cell; null means "no data"
+function summaryRows() {
+  const quests = state.quests.filter(q => q.type === 'quest');
+  const totalQp = quests.reduce((n, q) => n + q.qp, 0);
+  const frac = (done, total) => ({ v: done, text: done.toLocaleString(), frac: '/' + total.toLocaleString(), max: total });
+  const rows = [];
+  const add = (label, fn, note, ico) => rows.push({ label, note, ico, cells: PLAYERS.map(fn) });
+
+  add('Total level', p => {
+    const r = state.players[p];
+    if (!r.skills) return null;
+    const v = r.overall ? r.overall.level : Object.values(r.skills).reduce((n, s) => n + s.level, 0);
+    return { v, text: v.toLocaleString(), max: state.skills.length * MAX_LEVEL };
+  });
+  add('Total XP', p => {
+    const r = state.players[p];
+    if (!r.skills) return null;
+    const v = r.overall ? r.overall.xp : Object.values(r.skills).reduce((n, s) => n + (s.xp || 0), 0);
+    return { v, text: fmtXp(v), title: v.toLocaleString() + ' xp' };
+  });
+  add('Combat level', p => {
+    const r = state.players[p];
+    return r.skills ? { v: combatLevel(r.skills), text: String(combatLevel(r.skills)), max: 126 } : null;
+  });
+  add('Quests', p => {
+    const r = state.players[p];
+    if (r.status !== 'ok') return null;
+    return frac(quests.filter(q => questStatus(q, p) === 2).length, quests.length);
+  });
+  add('Quest points', p => {  // labelled with the quest point icon below
+    const r = state.players[p];
+    if (r.status !== 'ok') return null;
+    return frac(quests.reduce((n, q) => n + (questStatus(q, p) === 2 ? q.qp : 0), 0), totalQp);
+  }, null, 'Quest point');
+  add('Diary tiers', p => {
+    const d = (state.players[p].raw || {}).achievement_diaries;
+    if (!d) return null;
+    let done = 0, total = 0;
+    for (const region of Object.values(d)) for (const tier of Object.values(region)) { total++; if (tier.complete) done++; }
+    return frac(done, total);
+  }, 'complete tiers across all 12 regions');
+  add('Combat achievements', p => {
+    const c = (state.players[p].raw || {}).combat_achievements;
+    return Array.isArray(c) ? { v: c.length, text: c.length.toLocaleString() } : null;
+  });
+  add('Music tracks', p => {
+    const m = (state.players[p].raw || {}).music_tracks;
+    if (!m) return null;
+    const vals = Object.values(m);
+    return frac(vals.filter(Boolean).length, vals.length);
+  });
+  return rows;
+}
+
+const STATS_COLUMNS = [
+  { key: 'skill', label: 'Skill' },
+  ...PLAYERS.map((p, i) => ({ key: 'p' + i, label: p, cls: 'lv' })),
+  { key: 'low', label: 'Lowest', cls: 'lv' },
+  { key: 'spread', label: 'Spread', cls: 'lv' },
+];
+
+function skillRow(skill) {
+  const showXp = state.filter.showXp;
+  const cells = PLAYERS.map(p => skillOf(p, skill));
+  const nums = cells.map(c => c && (showXp ? c.xp : c.level)).filter(n => n != null);
+  const low = nums.length ? Math.min(...nums) : null;
+  const high = nums.length ? Math.max(...nums) : null;
+  return { skill, cells, low, high, spread: nums.length ? high - low : null };
+}
+
+function statsSortValue(row, key) {
+  switch (key) {
+    case 'skill': return SKILL_ORDER.indexOf(row.skill) + 1 || 999;
+    case 'low': return row.low == null ? -1 : row.low;
+    case 'spread': return row.spread == null ? -1 : row.spread;
+    default: {
+      const c = row.cells[+key.slice(1)];
+      return c == null ? -1 : (state.filter.showXp ? c.xp : c.level);
+    }
+  }
+}
+
+function renderStats() {
+  const { key, dir } = state.sort.stats;
+  const showXp = state.filter.showXp;
+  const needle = state.filter.q.trim().toLowerCase();
+  const rows = state.skills.map(skillRow)
+    .filter(r => !needle || r.skill.toLowerCase().includes(needle))
+    .sort((a, b) => {
+      const va = statsSortValue(a, key), vb = statsSortValue(b, key);
+      let c = va < vb ? -1 : va > vb ? 1 : 0;
+      if (c === 0) c = a.skill.localeCompare(b.skill);
+      return c * dir;
+    });
+
+  const head = STATS_COLUMNS.map(c =>
+    `<th class="${c.cls || ''}" data-key="${c.key}">${esc(c.label)}${c.key === key ? `<span class="dir">${dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`).join('');
+
+  // shared cell renderer: a background bar plus the number
+  const cell = ({ v, text, title, frac, max, best }) => {
+    const pct = max ? Math.max(0, Math.min(100, (v / max) * 100)) : 0;
+    return `<td class="lv"${title ? ` title="${esc(title)}"` : ''}>`
+      + (pct ? `<span class="bar" style="width:${pct.toFixed(1)}%"></span>` : '')
+      + `<span class="v${best ? ' best' : ''}">${esc(text)}${frac ? `<span class="frac">${esc(frac)}</span>` : ''}</span></td>`;
+  };
+  const blank = '<td class="lv"><span class="v none">–</span></td>';
+
+  const sums = needle ? [] : summaryRows();
+  const summary = sums.map((row, i) => {
+    const vals = row.cells.filter(Boolean).map(c => c.v);
+    const high = vals.length ? Math.max(...vals) : null;
+    const lead = vals.length > 1 && Math.min(...vals) !== high;
+    // rows without an absolute maximum get bars scaled to the group leader
+    return `<tr class="sum${i === sums.length - 1 ? ' last' : ''}"><td title="${esc(row.note || '')}">`
+      + (row.ico ? icon(row.ico, '') : '') + `${esc(row.label)}</td>`
+      + row.cells.map(c => c ? cell({ ...c, max: c.max || high, best: lead && c.v === high }) : blank).join('')
+      + '<td class="lv"></td><td class="lv"></td></tr>';
+  }).join('');
+
+  const body = rows.map(r => {
+    const best = r.high != null && r.low !== r.high;
+    return `<tr><td>${icon(r.skill)}<a href="${esc(wikiUrl(r.skill))}" target="_blank" rel="noopener">${esc(r.skill)}</a></td>`
+      + r.cells.map(c => {
+        if (!c) return blank;
+        const n = showXp ? c.xp : c.level;
+        if (n == null) return blank;
+        return cell({
+          v: c.level, max: MAX_LEVEL, best: best && n === r.high,
+          text: showXp ? fmtXp(c.xp) : String(c.level),
+          title: `Level ${c.level}${c.xp == null ? '' : ' · ' + c.xp.toLocaleString() + ' xp'}`,
+        });
+      }).join('')
+      + (r.low == null ? blank + blank
+        : cell({ v: r.low, max: showXp ? r.high : MAX_LEVEL, text: showXp ? fmtXp(r.low) : String(r.low) })
+          + cell({ v: r.spread, max: showXp ? 0 : MAX_LEVEL, text: showXp ? fmtXp(r.spread) : String(r.spread) }))
+      + '</tr>';
+  }).join('');
+
+  document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${summary}${body}</tbody>`;
+}
+
+function render() {
+  if (state.view === 'quests') renderQuests();
+  else if (state.view === 'items') renderItems();
+  else renderStats();
+}
 
 function setStatus(msg, isError) {
   document.getElementById('status').innerHTML = isError ? `<span class="err">${esc(msg)}</span>` : esc(msg);
@@ -388,7 +653,7 @@ document.getElementById('table').addEventListener('click', e => {
   const key = th.dataset.key;
   const s = state.sort[state.view];
   if (s.key === key) s.dir *= -1;
-  else { s.key = key; s.dir = ['name', 'difficulty', 'length', 'status', 'tradeable', 'reusable'].includes(key) ? 1 : -1; }
+  else { s.key = key; s.dir = ['name', 'skill', 'difficulty', 'length', 'status', 'tradeable', 'reusable', 'low'].includes(key) ? 1 : -1; }
   render();
 });
 document.querySelector('.tabs').addEventListener('click', e => {
@@ -400,7 +665,7 @@ document.querySelector('.tabs').addEventListener('click', e => {
   render();
 });
 document.getElementById('q').addEventListener('input', e => { state.filter.q = e.target.value; render(); });
-for (const id of ['hideDone', 'showMini', 'tradeableOnly', 'hideRetired']) {
+for (const id of ['hideDone', 'showMini', 'tradeableOnly', 'hideRetired', 'showXp']) {
   document.getElementById(id).addEventListener('change', e => { state.filter[id] = e.target.checked; render(); });
 }
 
@@ -420,10 +685,9 @@ function init() {
     return;
   }
   for (const name of PLAYERS) {
-    const p = data.players && data.players[name];
-    if (p && p.quests) ingestPlayerJson(name, p);
-    else state.players[name] = { status: 'error', error: 'No WikiSync data for this player' };
+    ingestPlayer(name, (data.players || {})[name], (data.stats || {})[name]);
   }
+  state.skills = collectSkills();
   const nq = state.quests.filter(q => q.type === 'quest').length;
   const unlinked = state.items.flatMap(it => it.needed).filter(n => !n.quest).length;
   setStatus(`${nq} quests, ${state.quests.length - nq} miniquests, ${state.items.length} items. Data fetched ${new Date(data.fetchedAt).toLocaleString()}.`

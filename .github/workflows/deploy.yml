@@ -30,6 +30,7 @@ jobs:
         run: |
           mkdir -p public
           cp index.html data.js public/
+          cp -r assets public/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
