@@ -582,7 +582,7 @@ function summaryRows() {
   const caTotal = (window.QUEST_DATA || {}).caTotal;
   const frac = (done, total) => ({ v: done, text: done.toLocaleString(), frac: '/' + total.toLocaleString(), max: total });
   const rows = [];
-  const add = (label, fn, opts) => rows.push({ label, fmt: n => n.toLocaleString(), ...opts, cells: PLAYERS.map(fn) });
+  const add = (label, fn, opts) => rows.push({ label, ...opts, cells: PLAYERS.map(fn) });
 
   add('Total level', p => {
     const r = state.players[p];
@@ -596,7 +596,7 @@ function summaryRows() {
     const known = Object.values(r.skills).filter(s => s.xp != null);
     const v = r.overall ? r.overall.xp : known.length ? known.reduce((n, s) => n + s.xp, 0) : null;
     return v == null ? null : { v, text: fmtXp(v), title: v.toLocaleString() + ' xp' };
-  }, { fmt: fmtXp });
+  });
   add('Combat level', p => {
     const r = state.players[p];
     return r.skills ? { v: combatLevel(r.skills), text: String(combatLevel(r.skills)), max: 126 } : null;
@@ -633,8 +633,6 @@ function summaryRows() {
 const STATS_COLUMNS = [
   { key: 'skill', label: 'General' },  // not sortable; a third click on any other column returns to this order
   ...PLAYERS.map((p, i) => ({ key: 'p' + i, label: p, cls: 'lv' })),
-  { key: 'low', label: 'Lowest', cls: 'lv' },
-  { key: 'spread', label: 'Spread', cls: 'lv' },
 ];
 
 // one row of the table: a label, per-player values (null = no data) and their spread
@@ -642,7 +640,7 @@ function metricRow(label, values, opts) {
   const nums = values.filter(n => n != null);
   const low = nums.length ? Math.min(...nums) : null;
   const high = nums.length ? Math.max(...nums) : null;
-  return { label, values, low, high, spread: nums.length ? high - low : null, order: 0, max: null, titles: [], link: '', ...opts };
+  return { label, values, low, high, order: 0, max: null, titles: [], link: '', ...opts };
 }
 
 function skillRows() {
@@ -680,8 +678,6 @@ function statsSections() {
 function statsSortValue(row, key) {
   switch (key) {
     case 'skill': return row.order;
-    case 'low': return row.low == null ? -1 : row.low;
-    case 'spread': return row.spread == null ? -1 : row.spread;
     default: { const v = row.values[+key.slice(1)]; return v == null ? -1 : v; }
   }
 }
@@ -714,12 +710,9 @@ function renderStats() {
     const low = vals.length ? Math.min(...vals) : null;
     const lead = vals.length > 1 && low !== high;
     // bars only where there is a real ceiling (total XP has none, so it gets no bar)
-    const rowMax = (row.cells.find(Boolean) || {}).max;
     return `<tr class="sum${i === sums.length - 1 ? ' last' : ''}"><td title="${esc(row.note || '')}">`
       + (row.ico ? icon(row.ico, '') : '') + `${esc(row.label)}</td>`
       + row.cells.map(c => c ? cell({ ...c, best: lead && c.v === high }) : blank).join('')
-      + (low == null ? blank + blank
-        : cell({ v: low, max: rowMax, text: row.fmt(low) }) + cell({ v: high - low, text: row.fmt(high - low) }))
       + '</tr>';
   }).join('');
 
@@ -733,9 +726,6 @@ function renderStats() {
       return `<tr><td>${icon(r.icon)}${name}</td>`
         + r.values.map((v, i) => v == null ? blank
           : cell({ v, max: r.max, best: best && v === r.high, zero: v === 0, text: v.toLocaleString(), title: r.titles[i] || '' })).join('')
-        + (r.low == null ? blank + blank
-          : cell({ v: r.low, max: r.max, zero: r.low === 0, text: r.low.toLocaleString() })
-            + cell({ v: r.spread, max: r.max, zero: r.spread === 0, text: r.spread.toLocaleString() }))
         + '</tr>';
     }).join('');
   }).join('');
@@ -767,7 +757,7 @@ document.getElementById('table').addEventListener('click', e => {
   const key = th.dataset.key;
   if (state.view === 'stats' && key === 'skill') return;  // "General" is a label, not a sort
   const s = state.sort[state.view];
-  const first = ['name', 'difficulty', 'length', 'status', 'tradeable', 'reusable', 'low'].includes(key) ? 1 : -1;
+  const first = ['name', 'difficulty', 'length', 'status', 'tradeable', 'reusable'].includes(key) ? 1 : -1;
   if (s.key !== key) { s.key = key; s.dir = first; }
   else if (state.view === 'stats' && s.dir === -first) { s.key = 'skill'; s.dir = 1; }  // third click: back to in-game order
   else s.dir *= -1;
