@@ -246,6 +246,15 @@
   tr.sec td { background: rgba(110,80,30,.16); font-weight: 700; padding: 9px 10px 5px; border-bottom: 2px solid rgba(70,48,14,.7); }
   tr.sec small { color: var(--muted); font-weight: 400; margin-left: 8px; }
   td.lv .v.zero { color: var(--unk); font-weight: 400; }
+  /* skill bars take the colour of the tier the level is in */
+  .t0 { background: rgba(139,107,61,.30); }
+  .t40 { background: rgba(62,132,200,.34); }
+  .t60 { background: rgba(192,57,43,.32); }
+  .t70 { background: rgba(92,60,140,.34); }
+  .t85 { background: rgba(28,138,110,.36); }
+  .t99 { background: rgba(214,162,24,.6); box-shadow: 0 0 6px rgba(214,162,24,.55); }
+  .tiers { float: right; font-weight: 400; font-size: 12px; color: var(--muted); }
+  .tiers .sw { display: inline-block; width: 22px; height: 11px; margin: 0 5px 0 14px; vertical-align: -1px; border-radius: 2px; }
   tr.sum:hover td { background: rgba(255,246,206,.75); }
   tr.sum[data-toggle] { cursor: pointer; }
   tr.sum.sub td { background: rgba(150,115,50,.09); }
@@ -728,6 +737,10 @@ const SKILL_ORDER = ['Attack', 'Hitpoints', 'Mining', 'Strength', 'Agility', 'Sm
   'Firemaking', 'Magic', 'Fletching', 'Woodcutting', 'Runecraft', 'Slayer', 'Farming',
   'Construction', 'Hunter', 'Sailing'];
 const MAX_LEVEL = 99;
+// level bands coloured after the gear they unlock: bronze until rune at 40, dragon at 60, barrows at 70, then 85 and 99
+const LEVEL_TIERS = [[99, 't99', '99'], [85, 't85', '85'], [70, 't70', '70 barrows'], [60, 't60', '60 dragon'], [40, 't40', '40 rune'], [1, 't0', 'bronze']];
+const tierOf = level => (LEVEL_TIERS.find(([min]) => level >= min) || LEVEL_TIERS[LEVEL_TIERS.length - 1])[1];
+const tierLegend = () => `<span class="tiers">${LEVEL_TIERS.slice().reverse().map(([, cls, label]) => `<i class="sw ${cls}"></i>${esc(label)}`).join('')}</span>`;
 
 const fmtXp = n => n == null ? '–'
   : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M'
@@ -951,10 +964,10 @@ function renderStats() {
     `<th class="${c.cls || ''}" data-key="${c.key}">${esc(c.label)}${c.key === key && c.key !== 'skill' ? `<span class="dir">${dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`).join('');
 
   // shared cell renderer: a background bar plus the number
-  const cell = ({ v, text, title, frac, max, best, zero }) => {
+  const cell = ({ v, text, title, frac, max, best, zero, tier }) => {
     const pct = max ? Math.max(0, Math.min(100, (v / max) * 100)) : 0;
     return `<td class="lv"${tipAttr(title)}>`
-      + (pct ? `<span class="bar" style="width:${pct.toFixed(1)}%"></span>` : '')
+      + (pct ? `<span class="bar${tier ? ' ' + tier : ''}" style="width:${pct.toFixed(1)}%"></span>` : '')
       + `<span class="v${best ? ' best' : ''}${zero ? ' zero' : ''}">${esc(text)}${frac ? `<span class="frac">${esc(frac)}</span>` : ''}</span></td>`;
   };
   const blank = '<td class="lv"><span class="v none">–</span></td>';
@@ -978,12 +991,12 @@ function renderStats() {
     const rows = (hideEmpty ? all.filter(r => r.high > 0) : all).sort(compare);
     const note = hideEmpty ? ` <small>${rows.length} of ${all.length} with any count</small>` : '';
     if (!all.length) return '';
-    return `<tr class="sec"><td colspan="${STATS_COLUMNS.length}">${esc(title)}${note}</td></tr>` + rows.map(r => {
+    return `<tr class="sec"><td colspan="${STATS_COLUMNS.length}">${esc(title)}${note}${title === 'Skills' ? tierLegend() : ''}</td></tr>` + rows.map(r => {
       const best = r.high != null && r.low !== r.high;
       const name = r.link ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.label)}</a>` : esc(r.label);
       return `<tr><td>${icon(r.icon)}${name}</td>`
         + r.values.map((v, i) => v == null ? blank
-          : cell({ v, max: r.max, best: best && v === r.high, zero: v === 0, text: v.toLocaleString(), title: r.titles[i] || '' })).join('')
+          : cell({ v, max: r.max, best: best && v === r.high, zero: v === 0, text: v.toLocaleString(), title: r.titles[i] || '', tier: r.max === MAX_LEVEL ? tierOf(v) : '' })).join('')
         + '</tr>';
     }).join('');
   }).join('');
