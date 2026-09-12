@@ -169,7 +169,7 @@
   .imp.lo { color: var(--unk); background: var(--unk-bg); }
   .keep { color: var(--ok); background: var(--ok-bg); }
   .retire { color: var(--no); background: var(--no-bg); }
-  .skip { color: var(--mid); background: var(--mid-bg); }
+  .skip, .solo { color: var(--mid); background: var(--mid-bg); }
   .untr { color: var(--unk); background: var(--unk-bg); }
   .qref { display: inline-block; margin: 1px 6px 1px 0; }
   .qref .n { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
@@ -294,6 +294,7 @@
   </span>
   <span class="legend only-items">
     <span><span class="tag keep">Keep</span> a pending quest still needs it</span>
+    <span><span class="tag solo">Don't store</span> one player still needs it - they can carry it</span>
     <span><span class="tag skip">Skip</span> only needed where it's found in-quest</span>
     <span><span class="tag retire">Retire</span> every quest needing it is done by all</span>
     <span><span class="tag untr">Untradeable</span> can't go in group storage</span>
@@ -496,12 +497,14 @@ function itemStatus(item) {
   const worth = pending.filter(n => !n.acquired);
   const playersNeeding = new Set();
   for (const n of worth) for (const p of PLAYERS) if (questStatus(n.quest, p) !== 2) playersNeeding.add(p);
-  if (item.tradeable === false) return { code: 'untr', label: 'Untradeable', rank: 3, pending: worth.length, players: playersNeeding.size };
-  if (!pending.length) return { code: 'retire', label: 'Retire', rank: 2, pending: 0, players: 0 };
-  if (!worth.length) return { code: 'skip', label: 'Skip', rank: 1, pending: 0, players: 0 };
-  // name the players when it is down to one or two of them
+  if (item.tradeable === false) return { code: 'untr', label: 'Untradeable', rank: 4, pending: worth.length, players: playersNeeding.size };
+  if (!pending.length) return { code: 'retire', label: 'Retire', rank: 3, pending: 0, players: 0 };
+  if (!worth.length) return { code: 'skip', label: 'Skip', rank: 2, pending: 0, players: 0 };
   const who = [...playersNeeding];
-  const whoLabel = who.length <= 2 ? who.join(' & ') : `${who.length} players`;
+  // group storage is for sharing - with one player left needing it, they can just carry it
+  if (who.length === 1) return { code: 'solo', label: `Don't store · only ${who[0]}`, rank: 1, pending: worth.length, players: 1, who };
+  // name the players when it is down to two of them
+  const whoLabel = who.length === 2 ? who.join(' & ') : `${who.length} players`;
   return { code: 'keep', label: `Keep · ${worth.length} quest${worth.length > 1 ? 's' : ''} · ${whoLabel}`, rank: 0, pending: worth.length, players: who.length, who };
 }
 
