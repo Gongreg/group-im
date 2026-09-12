@@ -635,7 +635,7 @@ const STATS_COLUMNS = [
   ...PLAYERS.map((p, i) => ({ key: 'p' + i, label: p, cls: 'lv' })),
 ];
 
-// one row of the table: a label, per-player values (null = no data) and their spread
+// one row of the table: a label and per-player values (null = no data); low/high pick out the leader
 function metricRow(label, values, opts) {
   const nums = values.filter(n => n != null);
   const low = nums.length ? Math.min(...nums) : null;
