@@ -55,6 +55,7 @@
   .chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px; }
   .chip .count { color: var(--green); font-weight: 700; }
   .chip.error { color: #ff9f8c; }
+  .chip.stale b { color: #d9c9a8; }   /* hasn't synced in days */
 
   .tabs { display: flex; gap: 6px; padding: 4px 0 0; }
   .tabs button { padding: 8px 14px; color: var(--dim); }
@@ -335,10 +336,11 @@ function linkItems() {
 }
 
 function ingestPlayer(name, sync, stats) {
-  const rec = { status: 'error', error: 'No WikiSync data for this player', quests: {}, raw: sync, skills: null, overall: null, activities: null };
+  const rec = { status: 'error', error: 'No WikiSync data for this player', quests: {}, raw: sync, skills: null, overall: null, activities: null, synced: null };
   if (sync && sync.quests) {
     rec.status = 'ok';
     rec.error = '';
+    rec.synced = sync.timestamp ? new Date(sync.timestamp) : null;  // their last login with the plugin
     for (const [k, v] of Object.entries(sync.quests)) rec.quests[norm(k)] = v;
   }
   // Hiscores are live; WikiSync levels are only as fresh as the last plugin login.
@@ -416,12 +418,26 @@ function itemStatus(item) {
 }
 
 // ---------- rendering ----------
+// "3 h ago", "2 days ago" - how old a player's WikiSync snapshot is
+function ago(date) {
+  const m = Math.round((Date.now() - date) / 60000);
+  if (m < 2) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  if (m < 48 * 60) return `${Math.round(m / 60)} h ago`;
+  return `${Math.round(m / 1440)} days ago`;
+}
+const STALE_AFTER = 3 * 24 * 60 * 60 * 1000;  // quests and diaries come from the last plugin login; flag old ones
+
 function renderPlayers() {
   document.getElementById('players').innerHTML = PLAYERS.map(name => {
     const p = state.players[name] || {};
     const [flair, story] = FLAIR[name] || ['', ''];
-    const cls = 'chip' + (p.status === 'error' ? ' error' : '');
-    return `<span class="${cls}"${tipAttr([story, p.error].filter(Boolean).map(esc).join('<br>'))}><b>${esc(name)}</b><span class="count">${esc(flair)}</span></span>`;
+    const stale = p.synced && Date.now() - p.synced > STALE_AFTER;
+    const cls = 'chip' + (p.status === 'error' ? ' error' : stale ? ' stale' : '');
+    const sync = p.synced
+      ? `<span class="dim">WikiSync ${ago(p.synced)} (${p.synced.toLocaleString()})${stale ? ' - quests and diaries may be behind' : ''}</span>`
+      : p.error ? `<span class="dim">${esc(p.error)}</span>` : '';
+    return `<span class="${cls}"${tipAttr([story ? esc(story) : '', sync].filter(Boolean).join('<br>'))}><b>${esc(name)}</b><span class="count">${esc(flair)}</span></span>`;
   }).join('');
 }
 
