@@ -11,14 +11,10 @@
     --ink: #1f1d18;
     --muted: #6d675c;
     --line: #dcd6c8;
-    --ok: #2e7d32;
-    --ok-bg: #e4f2e5;
-    --mid: #b26a00;
-    --mid-bg: #fff1d6;
-    --no: #b23a2e;
-    --no-bg: #f9e4e1;
-    --unk: #9a948a;
-    --unk-bg: #eeebe3;
+    --ok: #2e7d32;   --ok-bg: #e4f2e5;
+    --mid: #b26a00;  --mid-bg: #fff1d6;
+    --no: #b23a2e;   --no-bg: #f9e4e1;
+    --unk: #9a948a;  --unk-bg: #eeebe3;
     --accent: #3b4f8a;
   }
   * { box-sizing: border-box; }
@@ -28,14 +24,20 @@
   h1 { font-size: 20px; margin: 0; font-weight: 600; }
   .players { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
-    background: var(--paper); border: 1px solid var(--line); cursor: pointer; }
+    background: var(--paper); border: 1px solid var(--line); }
   .chip b { font-weight: 600; }
   .chip .count { color: var(--muted); font-variant-numeric: tabular-nums; }
   .chip.error { border-color: var(--no); color: var(--no); }
-  .chip.loading { color: var(--muted); }
-  .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; padding: 0 24px 12px; }
+
+  .tabs { display: flex; gap: 4px; padding: 0 24px; }
+  .tabs button { border-radius: 6px 6px 0 0; border-bottom: none; background: var(--bg); }
+  .tabs button.active { background: var(--paper); font-weight: 600; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; padding: 12px 24px; }
   .controls input[type=search] { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; min-width: 220px; font: inherit; }
   .controls label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  .controls .only-quests, .controls .only-items { display: none; }
+  body.view-quests .only-quests, body.view-items .only-items { display: inline-flex; }
   button { font: inherit; padding: 6px 12px; border: 1px solid var(--line); background: var(--paper); border-radius: 6px; cursor: pointer; }
   button:hover { border-color: var(--accent); }
   #status { padding: 0 24px 12px; color: var(--muted); }
@@ -43,126 +45,119 @@
 
   .wrap { padding: 0 24px 40px; overflow-x: auto; }
   table { border-collapse: collapse; background: var(--paper); border: 1px solid var(--line); width: 100%; }
-  th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: top; }
   th { position: sticky; top: 0; background: var(--paper); cursor: pointer; user-select: none; font-weight: 600; z-index: 1; }
   th:hover { color: var(--accent); }
   th .dir { color: var(--accent); margin-left: 4px; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   td.st, th.st { text-align: center; }
+  td.wrap-cell { white-space: normal; min-width: 260px; max-width: 520px; }
   td a { color: var(--ink); text-decoration: none; }
   td a:hover { text-decoration: underline; }
   tr.mini td:first-child { color: var(--muted); }
-  .mark { display: inline-block; min-width: 26px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+  .mark { display: inline-block; min-width: 26px; padding: 1px 6px; border-radius: 4px; font-weight: 600; text-align: center; }
   .m2 { color: var(--ok); background: var(--ok-bg); }
   .m1 { color: var(--mid); background: var(--mid-bg); }
   .m0 { color: var(--no); background: var(--no-bg); }
   .mx { color: var(--unk); background: var(--unk-bg); }
   tr.all-done td { opacity: .55; }
 
-  dialog { border: 1px solid var(--line); border-radius: 8px; padding: 20px; max-width: 640px; width: calc(100% - 40px); }
-  dialog textarea { width: 100%; height: 160px; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; margin: 10px 0; }
-  dialog code { background: var(--bg); padding: 2px 5px; border-radius: 4px; word-break: break-all; }
-  dialog .row { display: flex; gap: 8px; justify-content: flex-end; }
+  .item { display: inline; }
+  .item.untradeable { color: var(--muted); }
+  .item.acquired { font-style: italic; color: var(--muted); }
+  .item .qty { color: var(--muted); }
+  .item + .item::before { content: ", "; }
+
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 4px; font-weight: 600; }
+  .keep { color: var(--ok); background: var(--ok-bg); }
+  .retire { color: var(--no); background: var(--no-bg); }
+  .skip { color: var(--mid); background: var(--mid-bg); }
+  .untr { color: var(--unk); background: var(--unk-bg); }
+  .qref { display: inline-block; margin: 1px 6px 1px 0; }
+  .qref .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .qref.done { color: var(--muted); text-decoration: line-through; }
   .legend { color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
 </style>
 </head>
-<body>
+<body class="view-quests">
 
 <header>
   <h1>OSRS quest tracker</h1>
   <div class="players" id="players"></div>
-  <button id="reload">Reload all</button>
 </header>
 
+<div class="tabs">
+  <button data-view="quests" class="active">Quests</button>
+  <button data-view="items">Items &amp; group storage</button>
+</div>
+
 <div class="controls">
-  <input type="search" id="q" placeholder="Filter by quest name">
-  <label><input type="checkbox" id="hideDone"> Hide quests everyone finished</label>
-  <label><input type="checkbox" id="showMini" checked> Include miniquests</label>
-  <span class="legend">
+  <input type="search" id="q" placeholder="Filter by name">
+  <label class="only-quests"><input type="checkbox" id="hideDone"> Hide quests everyone finished</label>
+  <label class="only-quests"><input type="checkbox" id="showMini" checked> Include miniquests</label>
+  <label class="only-items"><input type="checkbox" id="tradeableOnly" checked> Tradeable only</label>
+  <label class="only-items"><input type="checkbox" id="hideRetired"> Hide retired</label>
+  <span class="legend only-quests">
     <span><span class="mark m2">✓</span> done</span>
     <span><span class="mark m1">◐</span> in progress</span>
     <span><span class="mark m0">✗</span> not started</span>
     <span><span class="mark mx">–</span> no data</span>
+    <span><i>italic item</i> = obtained during the quest</span>
+  </span>
+  <span class="legend only-items">
+    <span><span class="tag keep">Keep</span> a pending quest still needs it</span>
+    <span><span class="tag skip">Skip</span> only needed where it's found in-quest</span>
+    <span><span class="tag retire">Retire</span> every quest needing it is done by all</span>
+    <span><span class="tag untr">Untradeable</span> can't go in group storage</span>
   </span>
 </div>
 
-<div id="status">Loading quest list…</div>
+<div id="status">Loading…</div>
 
 <div class="wrap">
   <table id="table"></table>
 </div>
 
-<dialog id="pasteDialog">
-  <h3 style="margin:0">Load data for <span id="pasteName"></span> manually</h3>
-  <p>Open this URL in a new tab, copy everything on the page, and paste it below:</p>
-  <p><code id="pasteUrl"></code></p>
-  <textarea id="pasteBox" placeholder="{ &quot;username&quot;: ..., &quot;quests&quot;: { ... } }"></textarea>
-  <div class="row">
-    <button id="pasteCancel">Cancel</button>
-    <button id="pasteSave">Use this data</button>
-  </div>
-</dialog>
-
-<!-- Generated by fetch_data.py. If missing, the page falls back to live fetching. -->
+<!-- Generated by fetch_data.py -->
 <script src="data.js"></script>
 <script>
 // ---------- config ----------
 const PLAYERS = ['gaudyk', 'uncle sacks', 'Moms klit', 'knysliukas', 'cluescrollas'];
-const WIKI_API = 'https://oldschool.runescape.wiki/api.php';
 const WIKI_BASE = 'https://oldschool.runescape.wiki';
-const SYNC_API = 'https://sync.runescape.wiki/runelite/player';
-
 const DIFFICULTY = ['Novice', 'Intermediate', 'Experienced', 'Master', 'Grandmaster', 'Special'];
 const LENGTH = ['Very Short', 'Short', 'Medium', 'Long', 'Very Long'];
 
 // ---------- state ----------
 const state = {
-  quests: [],        // { name, url, type: 'quest'|'miniquest', members, difficulty, length, qp, series, release }
-  players: {},       // name -> { status: 'loading'|'ok'|'error', error, quests: { normName -> 0|1|2 } }
-  sort: { key: 'done', dir: -1 },
-  filter: { q: '', hideDone: false, showMini: true },
+  view: 'quests',
+  quests: [],        // { name, url, type, members, difficulty, length, qp, series, release, items: [] }
+  items: [],         // { name, page, reusable, total, tradeable, needed: [{ page, qty, acquired, quest }] }
+  players: {},       // name -> { status, quests: { normName -> 0|1|2 } }
+  sort: { quests: { key: 'done', dir: -1 }, items: { key: 'status', dir: 1 } },
+  filter: { q: '', hideDone: false, showMini: true, tradeableOnly: true, hideRetired: false },
 };
 
 const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const wikiUrl = title => `${WIKI_BASE}/w/${encodeURIComponent(title.replace(/ /g, '_'))}`;
 
-// ---------- quest list from the wiki ----------
-async function fetchQuestList() {
-  const url = `${WIKI_API}?action=parse&page=Quests/List&prop=text&formatversion=2&format=json&origin=*`;
-  let res;
-  try {
-    res = await fetch(url);
-  } catch (e) {
-    const hint = location.protocol === 'file:'
-      ? ' You opened this file directly (file://), so the browser sends no usable origin and the wiki rejects the request. Run fetch_data.py to generate data.js, or serve the folder with "python3 -m http.server" and open http://localhost:8000/osrs-quests.html.'
-      : '';
-    throw new Error(e.message + hint);
-  }
-  if (!res.ok) throw new Error(`Wiki API returned HTTP ${res.status}`);
-  const json = await res.json();
-  return parseQuestHtml(json.parse.text);
-}
-
+// ---------- parsing ----------
 function parseQuestHtml(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
-
   const quests = [];
   let questTables = 0;
-
   for (const table of doc.querySelectorAll('table.wikitable')) {
     const rows = [...table.querySelectorAll('tr')];
     if (!rows.length) continue;
     const headCells = [...rows[0].children];
     const heads = headCells.map(th => th.textContent.trim());
     const col = label => heads.findIndex(h => h.toLowerCase().startsWith(label.toLowerCase()));
-
     const iName = col('Name');
-    if (iName < 0) continue; // classification tables etc.
+    if (iName < 0) continue;
     const iDiff = col('Difficulty'), iLen = col('Length'), iSeries = col('Series'), iRel = col('Release');
     const iQp = headCells.findIndex(th => th.querySelector('img[alt*="Quest point" i], a[title="Quest points"]'));
     const isQuest = col('#') === 0;
-    const members = isQuest ? questTables++ > 0 : true; // 1st quest table is F2P, 2nd is members
-
+    const members = isQuest ? questTables++ > 0 : true;
     for (const tr of rows.slice(1)) {
       const td = [...tr.children];
       if (td.length <= iName) continue;
@@ -171,6 +166,7 @@ function parseQuestHtml(html) {
       if (!name) continue;
       quests.push({
         name,
+        page: link ? (link.getAttribute('title') || name) : name,
         url: link ? WIKI_BASE + link.getAttribute('href') : '',
         type: isQuest ? 'quest' : 'miniquest',
         members,
@@ -179,6 +175,7 @@ function parseQuestHtml(html) {
         qp: iQp >= 0 ? parseInt(td[iQp].textContent.trim(), 10) || 0 : 0,
         series: iSeries >= 0 ? td[iSeries].textContent.trim() : '',
         release: iRel >= 0 ? td[iRel].textContent.trim() : '',
+        items: [],
       });
     }
   }
@@ -186,39 +183,25 @@ function parseQuestHtml(html) {
   return quests;
 }
 
-// ---------- player data from WikiSync ----------
-function playerUrl(name) { return `${SYNC_API}/${encodeURIComponent(name)}/STANDARD`; }
+// link items <-> quests by page title
+function linkItems() {
+  const byPage = new Map(state.quests.map(q => [norm(q.page), q]));
+  for (const item of state.items) {
+    for (const need of item.needed) {
+      const quest = byPage.get(norm(need.page));
+      need.quest = quest || null;
+      if (quest) quest.items.push({ item, qty: need.qty, acquired: need.acquired });
+    }
+  }
+}
 
 function ingestPlayerJson(name, data) {
   const map = {};
   for (const [k, v] of Object.entries(data.quests || {})) map[norm(k)] = v;
-  state.players[name] = { status: 'ok', quests: map, raw: data };
-  try { localStorage.setItem('osrsq:' + name, JSON.stringify(data)); } catch (_) {}
+  state.players[name] = { status: 'ok', quests: map };
 }
 
-async function fetchPlayer(name) {
-  state.players[name] = { status: 'loading' };
-  renderPlayers();
-  try {
-    const res = await fetch(playerUrl(name));
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    ingestPlayerJson(name, await res.json());
-  } catch (e) {
-    // Fall back to data pasted earlier, if any
-    let cached = null;
-    try { cached = JSON.parse(localStorage.getItem('osrsq:' + name)); } catch (_) {}
-    if (cached) {
-      ingestPlayerJson(name, cached);
-      state.players[name].stale = true;
-    } else {
-      state.players[name] = { status: 'error', error: e.message || String(e) };
-    }
-  }
-  renderPlayers();
-  renderTable();
-}
-
-// status of one quest for one player: 2 done, 1 in progress, 0 not started, -1 no data
+// ---------- derived values ----------
 function questStatus(quest, playerName) {
   const p = state.players[playerName];
   if (!p || p.status !== 'ok') return -1;
@@ -228,6 +211,20 @@ function questStatus(quest, playerName) {
 function doneCount(quest) {
   return PLAYERS.reduce((n, p) => n + (questStatus(quest, p) === 2 ? 1 : 0), 0);
 }
+function questPending(quest) { return doneCount(quest) < PLAYERS.length; }
+
+// storage advice for an item
+function itemStatus(item) {
+  const uses = item.needed.filter(n => n.quest);
+  const pending = uses.filter(n => questPending(n.quest));
+  const worth = pending.filter(n => !n.acquired);
+  const playersNeeding = new Set();
+  for (const n of worth) for (const p of PLAYERS) if (questStatus(n.quest, p) !== 2) playersNeeding.add(p);
+  if (item.tradeable === false) return { code: 'untr', label: 'Untradeable', rank: 3, pending: worth.length };
+  if (!pending.length) return { code: 'retire', label: 'Retire', rank: 2, pending: 0 };
+  if (!worth.length) return { code: 'skip', label: 'Skip', rank: 1, pending: 0 };
+  return { code: 'keep', label: `Keep · ${worth.length} quest${worth.length > 1 ? 's' : ''} · ${playersNeeding.size} player${playersNeeding.size > 1 ? 's' : ''}`, rank: 0, pending: worth.length };
+}
 
 // ---------- rendering ----------
 function renderPlayers() {
@@ -235,82 +232,150 @@ function renderPlayers() {
   document.getElementById('players').innerHTML = PLAYERS.map(name => {
     const p = state.players[name] || {};
     let cls = 'chip', extra = '';
-    if (p.status === 'loading') { cls += ' loading'; extra = '…'; }
-    else if (p.status === 'error') { cls += ' error'; extra = 'failed – click to paste'; }
+    if (p.status === 'error') { cls += ' error'; extra = 'no data'; }
     else if (p.status === 'ok') {
       const done = state.quests.filter(q => q.type === 'quest' && questStatus(q, name) === 2).length;
-      extra = `${done}/${total}` + (p.stale ? ' (pasted)' : '');
+      extra = `${done}/${total}`;
     }
-    return `<span class="${cls}" data-name="${esc(name)}" title="${esc(p.error || 'Click to load data manually')}"><b>${esc(name)}</b><span class="count">${esc(extra)}</span></span>`;
+    return `<span class="${cls}" title="${esc(p.error || '')}"><b>${esc(name)}</b><span class="count">${esc(extra)}</span></span>`;
   }).join('');
 }
 
-const COLUMNS = [
+const MARK = { 2: ['m2', '✓', 'Completed'], 1: ['m1', '◐', 'In progress'], 0: ['m0', '✗', 'Not started'], '-1': ['mx', '–', 'No data'] };
+
+const QUEST_COLUMNS = [
   { key: 'name', label: 'Quest' },
   { key: 'difficulty', label: 'Difficulty' },
   { key: 'length', label: 'Length' },
   { key: 'qp', label: 'QP', cls: 'num' },
   { key: 'done', label: 'Done by', cls: 'num' },
   ...PLAYERS.map((p, i) => ({ key: 'p' + i, label: p, cls: 'st' })),
+  { key: 'items', label: 'Items required', cls: 'wrap-cell' },
 ];
 
-function sortValue(q, key) {
+function questSortValue(q, key) {
   switch (key) {
     case 'name': return q.name.toLowerCase();
     case 'difficulty': return DIFFICULTY.indexOf(q.difficulty);
     case 'length': return LENGTH.indexOf(q.length);
     case 'qp': return q.qp;
     case 'done': return doneCount(q);
+    case 'items': return q.items.length;
     default: return questStatus(q, PLAYERS[+key.slice(1)]);
   }
 }
 
-function sortedFilteredQuests() {
+function renderItemInline(entry) {
+  const { item, qty, acquired } = entry;
+  const cls = ['item', item.tradeable === false ? 'untradeable' : '', acquired ? 'acquired' : ''].join(' ');
+  const title = [item.tradeable === false ? 'Untradeable' : item.tradeable ? 'Tradeable' : 'Tradeability unknown',
+    item.reusable ? 'reusable' : '', acquired ? 'obtained during quest' : ''].filter(Boolean).join(', ');
+  return `<span class="${cls}" title="${esc(title)}"><a href="${esc(wikiUrl(item.page))}" target="_blank" rel="noopener">${esc(item.name)}</a>${qty ? `<span class="qty"> ×${qty.toLocaleString()}</span>` : ''}</span>`;
+}
+
+function renderQuests() {
+  const { key, dir } = state.sort.quests;
   const { q, hideDone, showMini } = state.filter;
   const needle = q.trim().toLowerCase();
   const list = state.quests.filter(x =>
     (showMini || x.type === 'quest') &&
-    (!needle || x.name.toLowerCase().includes(needle)) &&
-    (!hideDone || doneCount(x) < PLAYERS.length)
-  );
-  const { key, dir } = state.sort;
-  return list.sort((a, b) => {
-    const va = sortValue(a, key), vb = sortValue(b, key);
+    (!needle || x.name.toLowerCase().includes(needle) || x.items.some(e => e.item.name.toLowerCase().includes(needle))) &&
+    (!hideDone || questPending(x))
+  ).sort((a, b) => {
+    const va = questSortValue(a, key), vb = questSortValue(b, key);
     let c = va < vb ? -1 : va > vb ? 1 : 0;
     if (c === 0 && key !== 'done') c = doneCount(b) - doneCount(a);
     if (c === 0) c = a.name.localeCompare(b.name);
     return c * dir;
   });
-}
 
-const MARK = { 2: ['m2', '✓', 'Completed'], 1: ['m1', '◐', 'In progress'], 0: ['m0', '✗', 'Not started'], '-1': ['mx', '–', 'No data'] };
+  const head = QUEST_COLUMNS.map(c =>
+    `<th class="${c.cls || ''}" data-key="${c.key}">${esc(c.label)}${c.key === key ? `<span class="dir">${dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`).join('');
 
-function renderTable() {
-  const { key, dir } = state.sort;
-  const head = COLUMNS.map(c =>
-    `<th class="${c.cls || ''}" data-key="${c.key}">${esc(c.label)}${c.key === key ? `<span class="dir">${dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`
-  ).join('');
-
-  const rows = sortedFilteredQuests().map(q => {
-    const done = doneCount(q);
+  const rows = list.map(qst => {
+    const done = doneCount(qst);
     const cells = PLAYERS.map(p => {
-      const [cls, sym, title] = MARK[questStatus(q, p)];
+      const [cls, sym, title] = MARK[questStatus(qst, p)];
       return `<td class="st"><span class="mark ${cls}" title="${title}">${sym}</span></td>`;
     }).join('');
-    const rowCls = [q.type === 'miniquest' ? 'mini' : '', done === PLAYERS.length ? 'all-done' : ''].join(' ').trim();
-    const nameCell = q.url ? `<a href="${esc(q.url)}" target="_blank" rel="noopener">${esc(q.name)}</a>` : esc(q.name);
+    const rowCls = [qst.type === 'miniquest' ? 'mini' : '', done === PLAYERS.length ? 'all-done' : ''].join(' ').trim();
+    const nameCell = qst.url ? `<a href="${esc(qst.url)}" target="_blank" rel="noopener">${esc(qst.name)}</a>` : esc(qst.name);
+    const items = [...qst.items].sort((a, b) => (a.acquired - b.acquired) || a.item.name.localeCompare(b.item.name));
     return `<tr class="${rowCls}">
-      <td>${nameCell}${q.type === 'miniquest' ? ' <small>(miniquest)</small>' : ''}</td>
-      <td>${esc(q.difficulty)}</td>
-      <td>${esc(q.length)}</td>
-      <td class="num">${q.type === 'quest' ? q.qp : ''}</td>
+      <td>${nameCell}${qst.type === 'miniquest' ? ' <small>(miniquest)</small>' : ''}</td>
+      <td>${esc(qst.difficulty)}</td>
+      <td>${esc(qst.length)}</td>
+      <td class="num">${qst.type === 'quest' ? qst.qp : ''}</td>
       <td class="num">${done}/${PLAYERS.length}</td>
       ${cells}
+      <td class="wrap-cell">${items.map(renderItemInline).join('') || '<span class="item untradeable">–</span>'}</td>
     </tr>`;
   }).join('');
 
   document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${rows}</tbody>`;
 }
+
+const ITEM_COLUMNS = [
+  { key: 'name', label: 'Item' },
+  { key: 'status', label: 'Group storage' },
+  { key: 'tradeable', label: 'Tradeable', cls: 'st' },
+  { key: 'reusable', label: 'Reusable', cls: 'st' },
+  { key: 'total', label: 'Total qty', cls: 'num' },
+  { key: 'needed', label: 'Needed for (done by)', cls: 'wrap-cell' },
+];
+
+function itemSortValue(it, key, st) {
+  switch (key) {
+    case 'name': return it.name.toLowerCase();
+    case 'status': return st.rank * 1000 - st.pending;
+    case 'tradeable': return it.tradeable === true ? 0 : it.tradeable === null ? 1 : 2;
+    case 'reusable': return it.reusable ? 0 : 1;
+    case 'total': return it.total || 0;
+    case 'needed': return it.needed.length;
+  }
+}
+
+function renderItems() {
+  const { key, dir } = state.sort.items;
+  const { q, tradeableOnly, hideRetired } = state.filter;
+  const needle = q.trim().toLowerCase();
+  const list = state.items.map(it => ({ it, st: itemStatus(it) })).filter(({ it, st }) =>
+    (!tradeableOnly || it.tradeable !== false) &&
+    (!hideRetired || st.code === 'keep') &&
+    (!needle || it.name.toLowerCase().includes(needle) || it.needed.some(n => n.page.toLowerCase().includes(needle)))
+  ).sort((a, b) => {
+    const va = itemSortValue(a.it, key, a.st), vb = itemSortValue(b.it, key, b.st);
+    let c = va < vb ? -1 : va > vb ? 1 : 0;
+    if (c === 0) c = a.it.name.localeCompare(b.it.name);
+    return c * dir;
+  });
+
+  const head = ITEM_COLUMNS.map(c =>
+    `<th class="${c.cls || ''}" data-key="${c.key}">${esc(c.label)}${c.key === key ? `<span class="dir">${dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`).join('');
+
+  const rows = list.map(({ it, st }) => {
+    const needed = it.needed.map(n => {
+      const done = n.quest ? doneCount(n.quest) : null;
+      const cls = 'qref' + (n.quest && !questPending(n.quest) ? ' done' : '');
+      const label = n.quest ? n.quest.name : n.page;
+      const extra = [n.qty ? `×${n.qty.toLocaleString()}` : '', n.acquired ? 'in-quest' : ''].filter(Boolean).join(', ');
+      return `<span class="${cls}" title="${esc(n.acquired ? 'Obtained during the quest' : '')}"><a href="${esc(wikiUrl(n.page))}" target="_blank" rel="noopener">${esc(label)}</a> <span class="n">${done === null ? '?' : done + '/' + PLAYERS.length}${extra ? ', ' + esc(extra) : ''}</span></span>`;
+    }).join('');
+    const tr = it.tradeable === true ? '<span class="mark m2">✓</span>' : it.tradeable === false ? '<span class="mark m0">✗</span>' : '<span class="mark mx">?</span>';
+    return `<tr>
+      <td><a href="${esc(wikiUrl(it.page))}" target="_blank" rel="noopener">${esc(it.name)}</a></td>
+      <td><span class="tag ${st.code}">${esc(st.label)}</span></td>
+      <td class="st">${tr}</td>
+      <td class="st">${it.reusable ? '<span class="mark m2">✓</span>' : ''}</td>
+      <td class="num">${it.total == null ? '' : it.total.toLocaleString()}</td>
+      <td class="wrap-cell">${needed}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${rows}</tbody>`;
+}
+
+function render() { state.view === 'quests' ? renderQuests() : renderItems(); }
 
 function setStatus(msg, isError) {
   document.getElementById('status').innerHTML = isError ? `<span class="err">${esc(msg)}</span>` : esc(msg);
@@ -321,69 +386,50 @@ document.getElementById('table').addEventListener('click', e => {
   const th = e.target.closest('th');
   if (!th) return;
   const key = th.dataset.key;
-  if (state.sort.key === key) state.sort.dir *= -1;
-  else state.sort = { key, dir: key === 'name' || key === 'difficulty' || key === 'length' ? 1 : -1 };
-  renderTable();
+  const s = state.sort[state.view];
+  if (s.key === key) s.dir *= -1;
+  else { s.key = key; s.dir = ['name', 'difficulty', 'length', 'status', 'tradeable', 'reusable'].includes(key) ? 1 : -1; }
+  render();
 });
-
-document.getElementById('q').addEventListener('input', e => { state.filter.q = e.target.value; renderTable(); });
-document.getElementById('hideDone').addEventListener('change', e => { state.filter.hideDone = e.target.checked; renderTable(); });
-document.getElementById('showMini').addEventListener('change', e => { state.filter.showMini = e.target.checked; renderTable(); });
-document.getElementById('reload').addEventListener('click', init);
-
-// manual paste fallback
-let pasteTarget = null;
-document.getElementById('players').addEventListener('click', e => {
-  const chip = e.target.closest('.chip');
-  if (!chip) return;
-  pasteTarget = chip.dataset.name;
-  document.getElementById('pasteName').textContent = pasteTarget;
-  document.getElementById('pasteUrl').textContent = playerUrl(pasteTarget);
-  document.getElementById('pasteBox').value = '';
-  document.getElementById('pasteDialog').showModal();
+document.querySelector('.tabs').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  state.view = b.dataset.view;
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
+  document.body.className = 'view-' + state.view;
+  render();
 });
-document.getElementById('pasteCancel').addEventListener('click', () => document.getElementById('pasteDialog').close());
-document.getElementById('pasteSave').addEventListener('click', () => {
-  try {
-    const data = JSON.parse(document.getElementById('pasteBox').value);
-    if (!data.quests) throw new Error('JSON has no "quests" field');
-    ingestPlayerJson(pasteTarget, data);
-    state.players[pasteTarget].stale = true;
-    document.getElementById('pasteDialog').close();
-    renderPlayers();
-    renderTable();
-  } catch (err) {
-    alert('Could not read that: ' + err.message);
-  }
-});
+document.getElementById('q').addEventListener('input', e => { state.filter.q = e.target.value; render(); });
+for (const id of ['hideDone', 'showMini', 'tradeableOnly', 'hideRetired']) {
+  document.getElementById(id).addEventListener('change', e => { state.filter[id] = e.target.checked; render(); });
+}
 
 // ---------- boot ----------
-async function init() {
-  const local = window.QUEST_DATA;
-  setStatus(local ? 'Reading data.js…' : 'Loading quest list from the wiki…');
-  try {
-    state.quests = local ? parseQuestHtml(local.listHtml) : await fetchQuestList();
-    const nq = state.quests.filter(q => q.type === 'quest').length;
-    const src = local ? `From data.js, fetched ${new Date(local.fetchedAt).toLocaleString()}.` : 'Live from the wiki.';
-    setStatus(`${nq} quests, ${state.quests.length - nq} miniquests. ${src} Click a column header to sort.`);
-  } catch (e) {
-    setStatus('Could not load the quest list: ' + e.message, true);
+function init() {
+  const data = window.QUEST_DATA;
+  if (!data) {
+    setStatus('data.js is missing. Run fetch_data.py (or wait for the next scheduled deploy).', true);
     return;
   }
-  renderPlayers();
-  renderTable();
-
-  if (local) {
-    for (const name of PLAYERS) {
-      const data = local.players && local.players[name];
-      if (data && data.quests) ingestPlayerJson(name, data);
-      else state.players[name] = { status: 'error', error: 'Not in data.js (fetch_data.py could not load this player)' };
-    }
-    renderPlayers();
-    renderTable();
-  } else {
-    await Promise.all(PLAYERS.map(fetchPlayer));
+  try {
+    state.quests = parseQuestHtml(data.listHtml);
+    state.items = data.items || [];
+    linkItems();
+  } catch (e) {
+    setStatus('Could not read data.js: ' + e.message, true);
+    return;
   }
+  for (const name of PLAYERS) {
+    const p = data.players && data.players[name];
+    if (p && p.quests) ingestPlayerJson(name, p);
+    else state.players[name] = { status: 'error', error: 'No WikiSync data for this player' };
+  }
+  const nq = state.quests.filter(q => q.type === 'quest').length;
+  const unlinked = state.items.flatMap(it => it.needed).filter(n => !n.quest).length;
+  setStatus(`${nq} quests, ${state.quests.length - nq} miniquests, ${state.items.length} items. Data fetched ${new Date(data.fetchedAt).toLocaleString()}.`
+    + (unlinked ? ` ${unlinked} item→quest links could not be matched.` : ''));
+  renderPlayers();
+  render();
 }
 init();
 </script>
