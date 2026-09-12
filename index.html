@@ -732,9 +732,6 @@ const SKILL_ORDER = ['Attack', 'Hitpoints', 'Mining', 'Strength', 'Agility', 'Sm
   'Construction', 'Hunter', 'Sailing'];
 const MAX_LEVEL = 99;
 
-const fmtXp = n => n == null ? '–'
-  : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M'
-  : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k'
   : n.toLocaleString();
 
 function collectSkills() {
@@ -771,14 +768,9 @@ function summaryRows() {
     if (!r.skills) return null;
     const v = r.overall ? r.overall.level : Object.values(r.skills).reduce((n, s) => n + s.level, 0);
     const max = state.skills.length * MAX_LEVEL;
-    return { v, text: v.toLocaleString(), frac: '/' + max.toLocaleString(), max };
-  });
-  add('Total XP', p => {
-    const r = state.players[p];
-    if (!r.skills) return null;
     const known = Object.values(r.skills).filter(s => s.xp != null);
-    const v = r.overall ? r.overall.xp : known.length ? known.reduce((n, s) => n + s.xp, 0) : null;
-    return v == null ? null : { v, text: fmtXp(v), title: v.toLocaleString() + ' xp' };
+    const xp = r.overall ? r.overall.xp : known.length ? known.reduce((n, s) => n + s.xp, 0) : null;  // total xp lives in the tooltip
+    return { v, text: v.toLocaleString(), frac: '/' + max.toLocaleString(), max, title: xp == null ? '' : `<b>${v.toLocaleString()} total</b><br>${xp.toLocaleString()} xp` };
   });
   add('Combat level', p => {
     const r = state.players[p];
