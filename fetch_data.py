@@ -8,11 +8,15 @@
   - Levels, XP, clue counts and boss kill counts per player (official hiscores; live)
   - Number of combat achievement tasks (wiki), so the stats tab can show a fraction
   - Skill requirements per quest (from each quest page's infobox wikitext)
+  - Collection log history: WikiSync lists the log in a fixed order, so when each item
+    was gained is recorded here by diffing against the previous run (HISTORY file)
 
 Usage: python3 fetch_data.py
 Only stdlib is used.
 """
+import base64
 import json
+import os
 import re
 import sys
 import time
@@ -28,6 +32,8 @@ WIKI_API = "https://oldschool.runescape.wiki/api.php"
 SYNC_URL = "https://sync.runescape.wiki/runelite/player/{name}/STANDARD"
 HISCORES_URL = "https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player={name}"
 USER_AGENT = "osrs-quest-tracker/1.1 (personal tool for a friend group)"
+HISTORY = os.environ.get("HISTORY", "history/collection_log.json")
+WIKI_IMAGES = "https://oldschool.runescape.wiki/images/"
 
 
 def get_json(url: str):
@@ -322,6 +328,71 @@ def fetch_reqs(titles):
     return reqs
 
 
+def fetch_bytes(url: str):
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return resp.read(), resp.geturl()
+
+
+def lookup_item(item_id: int):
+    """Item name and icon (data URI) from the wiki, by id."""
+    _, final = fetch_bytes(f"https://oldschool.runescape.wiki/w/Special:Lookup?type=item&id={item_id}")
+    name = urllib.parse.unquote(final.split("/w/")[-1].split("#")[0].split("?")[0]).replace("_", " ")
+    icon = None
+    for suffix in ("", "_5", "_1"):  # stackables keep numbered icon files
+        try:
+            blob, _ = fetch_bytes(WIKI_IMAGES + urllib.parse.quote(name.replace(" ", "_")) + suffix + ".png")
+            icon = "data:image/png;base64," + base64.b64encode(blob).decode()
+            break
+        except urllib.error.HTTPError:
+            continue
+    return name, icon
+
+
+def update_clog_history(players):
+    """First-seen time per collection log item per player, kept across runs.
+
+    Items present the first time a player's log is seen get no time (they were
+    gained before tracking began). Unknown ids are resolved to names and icons
+    once and cached in the same file.
+    """
+    try:
+        with open(HISTORY, encoding="utf-8") as f:
+            hist = json.load(f)
+    except (OSError, ValueError):
+        hist = {"players": {}, "items": {}}
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    for name in PLAYERS:
+        data = players.get(name) or {}
+        ids = [int(i) for i in (data.get("collection_log") or []) if isinstance(i, int)]
+        if not ids:
+            continue  # not synced (yet); keep what we have
+        seen = hist["players"].setdefault(name, {})
+        first_time = not seen
+        for i in ids:
+            seen.setdefault(str(i), None if first_time else now)
+    unresolved = sorted({i for p in hist["players"].values() for i in p} - set(hist["items"]), key=int)
+    for i in unresolved:
+        try:
+            item_name, icon = lookup_item(int(i))
+            hist["items"][i] = {"name": item_name, "icon": icon}
+        except Exception as e:  # noqa: BLE001
+            print(f"  item {i}: {e}")
+        time.sleep(0.3)
+    os.makedirs(os.path.dirname(HISTORY) or ".", exist_ok=True)
+    with open(HISTORY, "w", encoding="utf-8") as f:
+        json.dump(hist, f)
+    tracked = sum(len(p) for p in hist["players"].values())
+    print(f"  {tracked} logged items across {len(hist['players'])} players, {len(unresolved)} newly resolved")
+    # what the page needs: per player, items newest first (untimed ones last)
+    out = {}
+    for name, seen in hist["players"].items():
+        rows = [{"id": int(i), "seen": t, **hist["items"].get(i, {"name": f"Item {i}", "icon": None})} for i, t in seen.items()]
+        rows.sort(key=lambda r: (r["seen"] is not None, r["seen"] or ""), reverse=True)  # newest first, untimed last
+        out[name] = rows[:40]
+    return out
+
+
 def fetch_ca_total():
     """How many combat achievement tasks exist, from the wiki's all-tasks table."""
     p = TableParser()
@@ -350,6 +421,9 @@ def main() -> int:
     print("Fetching player stats...")
     stats = fetch_stats()
 
+    print("Updating collection log history...")
+    clog = update_clog_history(players)
+
     payload = {
         "fetchedAt": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "listHtml": list_html,
@@ -358,6 +432,7 @@ def main() -> int:
         "stats": stats,
         "caTotal": ca_total,
         "reqs": reqs,
+        "clog": clog,
     }
     js = "window.QUEST_DATA = " + json.dumps(payload).replace("</", "<\\/") + ";\n"
     with open("data.js", "w", encoding="utf-8") as f:

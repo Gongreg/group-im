@@ -77,7 +77,7 @@
   .controls input[type=checkbox] { accent-color: #6b8f2c; width: 16px; height: 16px; }
   .controls .only-quests, .controls .only-items { display: none; }
   body.view-quests .only-quests, body.view-items .only-items { display: inline-flex; }
-  body.view-stats .controls, body.view-training .controls, body.view-progress .controls { display: none; }
+  body.view-stats .controls, body.view-training .controls, body.view-progress .controls, body.view-clog .controls { display: none; }
   button { cursor: pointer; }
   button:hover { filter: brightness(1.3); }
   .tabs button.active:hover { filter: brightness(1.6) contrast(.95); }
@@ -113,7 +113,7 @@
   table { border-collapse: collapse; width: 100%; background: transparent; }
   th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: top; }
   td { font-weight: 600; }
-  body.view-progress th { cursor: default; }
+  body.view-progress th, body.view-clog th { cursor: default; }
   th { position: sticky; top: 0; z-index: 1; cursor: pointer; user-select: none; font-weight: 700;
     color: var(--ink); background: rgba(110,80,30,.16); letter-spacing: .2px;
     border-bottom: 2px solid rgba(70,48,14,.7); box-shadow: inset 0 1px 0 rgba(255,252,238,.5); }
@@ -214,6 +214,10 @@
   td.ms .icon { width: 22px; height: 22px; vertical-align: -6px; margin-right: 8px; }
   td.ms .how { display: block; margin-left: 30px; color: var(--muted); font-weight: 400; font-size: 12px; }
   tr.credit td { color: var(--muted); font-weight: 400; text-align: center; }
+  td.li { white-space: normal; min-width: 170px; vertical-align: middle; }
+  td.li .icon { width: 24px; height: 24px; vertical-align: -7px; margin-right: 8px; }
+  td.li .when { display: block; margin-left: 32px; color: var(--muted); font-weight: 400; font-size: 12px; }
+  td.li.none { color: var(--muted); font-weight: 400; }
   tr.sum td { background: var(--sum-bg); }
   tr.sum td:first-child { font-weight: 700; }
   tr.sum.last td { border-bottom: 2px solid rgba(70,48,14,.7); }
@@ -246,6 +250,7 @@
   <button data-view="items">Items &amp; group storage</button>
   <button data-view="training">Training targets</button>
   <button data-view="progress">Progression</button>
+  <button data-view="clog">Collection log</button>
 </div>
 
 <div id="news" hidden></div>
@@ -1020,11 +1025,35 @@ function renderProgress() {
   document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${summary}${body}${credit}</tbody>`;
 }
 
+// ---------- collection log: the last items each player gained ----------
+const RECENT = 10;
+function renderClog() {
+  const clog = (window.QUEST_DATA || {}).clog || {};
+  const head = '<th data-key="none">#</th>' + PLAYERS.map(p => {
+    const n = kcOf(p, 'Collections Logged');
+    return `<th data-key="none">${esc(p)}${n != null ? `<span class="frac"> · ${n} logged</span>` : ''}</th>`;
+  }).join('');
+  const lists = PLAYERS.map(p => (clog[p] || []).slice(0, RECENT));
+  const rows = [];
+  for (let i = 0; i < RECENT; i++) {
+    rows.push(`<tr><td class="num">${i + 1}</td>` + PLAYERS.map((p, k) => {
+      const it = lists[k][i];
+      if (!it) return i === 0 && !lists[k].length ? '<td class="li none">not synced yet - open the collection log in game and press the WikiSync button</td>' : '<td class="li"></td>';
+      const when = it.seen ? ago(Date.now() - new Date(it.seen)) : 'before tracking began';
+      const ic = it.icon ? `<img class="icon" src="${it.icon}" alt="">` : '';
+      return `<td class="li"${tipAttr(it.seen ? new Date(it.seen).toLocaleString() : 'Already in the log when tracking started')}>${ic}<a href="${esc(wikiUrl(it.name))}" target="_blank" rel="noopener">${esc(it.name)}</a><span class="when">${esc(when)}</span></td>`;
+    }).join('') + '</tr>');
+  }
+  const note = `<tr class="credit"><td colspan="${PLAYERS.length + 1}">The log syncs when a player presses WikiSync inside the collection log; the site checks hourly and notes when each new item first appears.</td></tr>`;
+  document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${rows.join('')}${note}</tbody>`;
+}
+
 function render() {
   if (state.view === 'quests') renderQuests();
   else if (state.view === 'items') renderItems();
   else if (state.view === 'training') renderTraining();
   else if (state.view === 'progress') renderProgress();
+  else if (state.view === 'clog') renderClog();
   else renderStats();
 }
 
