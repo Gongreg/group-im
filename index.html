@@ -162,6 +162,9 @@
   tr.sum td { background: var(--sum-bg); }
   tr.sum td:first-child { font-weight: 700; }
   tr.sum.last td { border-bottom: 2px solid rgba(70,48,14,.7); }
+  tr.sec td { background: var(--band); font-weight: 700; padding: 9px 10px 5px; border-bottom: 2px solid rgba(70,48,14,.7); }
+  tr.sec small { color: var(--muted); font-weight: 400; margin-left: 8px; }
+  td.lv .v.zero { color: var(--unk); font-weight: 400; }
   tr.sum:hover td { background: rgba(255,246,206,.75); }
   td.lv .frac { color: var(--muted); font-weight: 400; }
 </style>
@@ -230,8 +233,9 @@ const state = {
 };
 
 const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-const icon = (name, alt) => ICONS.has(name)
-  ? `<img class="icon" src="assets/icons/${esc(name.replace(/ /g, '_'))}.png" alt="${esc(alt == null ? name : alt)}">` : '';
+const slug = s => s.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');
+const icon = (name, alt) =>
+  `<img class="icon" src="assets/icons/${esc(slug(name))}.png" alt="${esc(alt == null ? name : alt)}" onerror="this.remove()">`;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const wikiUrl = title => `${WIKI_BASE}/w/${encodeURIComponent(title.replace(/ /g, '_'))}`;
 
@@ -290,7 +294,7 @@ function linkItems() {
 }
 
 function ingestPlayer(name, sync, stats) {
-  const rec = { status: 'error', error: 'No WikiSync data for this player', quests: {}, raw: sync, skills: null, overall: null };
+  const rec = { status: 'error', error: 'No WikiSync data for this player', quests: {}, raw: sync, skills: null, overall: null, activities: null };
   if (sync && sync.quests) {
     rec.status = 'ok';
     rec.error = '';
@@ -300,6 +304,7 @@ function ingestPlayer(name, sync, stats) {
   if (stats && stats.skills) {
     rec.skills = stats.skills;
     rec.overall = stats.overall || null;
+    rec.activities = stats.activities || null;
   } else if (sync && sync.levels) {
     rec.skills = Object.fromEntries(Object.entries(sync.levels).map(([k, v]) => [k, { level: v, xp: null }]));
   }
@@ -536,7 +541,6 @@ const SKILL_ORDER = ['Attack', 'Hitpoints', 'Mining', 'Strength', 'Agility', 'Sm
   'Firemaking', 'Magic', 'Fletching', 'Woodcutting', 'Runecraft', 'Slayer', 'Farming',
   'Construction', 'Hunter', 'Sailing'];
 const MAX_LEVEL = 99;
-const ICONS = new Set([...SKILL_ORDER, 'Quest point']);
 
 const fmtXp = n => n == null ? '–'
   : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M'
@@ -625,45 +629,73 @@ const STATS_COLUMNS = [
   { key: 'spread', label: 'Spread', cls: 'lv' },
 ];
 
-function skillRow(skill) {
-  const cells = PLAYERS.map(p => skillOf(p, skill));
-  const nums = cells.map(c => c && c.level).filter(n => n != null);
+// one row of the table: a label, per-player values (null = no data) and their spread
+function metricRow(label, values, opts) {
+  const nums = values.filter(n => n != null);
   const low = nums.length ? Math.min(...nums) : null;
   const high = nums.length ? Math.max(...nums) : null;
-  return { skill, cells, low, high, spread: nums.length ? high - low : null };
+  return { label, values, low, high, spread: nums.length ? high - low : null, order: 0, max: null, titles: [], link: '', ...opts };
+}
+
+function skillRows() {
+  return state.skills.map(skill => {
+    const cells = PLAYERS.map(p => skillOf(p, skill));
+    return metricRow(skill, cells.map(c => c && c.level), {
+      icon: skill, link: wikiUrl(skill), max: MAX_LEVEL, order: SKILL_ORDER.indexOf(skill) + 1 || 999,
+      titles: cells.map(c => c ? `Level ${c.level}${c.xp == null ? '' : ' · ' + c.xp.toLocaleString() + ' xp'}` : ''),
+    });
+  });
+}
+
+// hiscores activities in the order the site lists them: clue tiers, minigames, then bosses
+function activityRows() {
+  const names = [];
+  for (const p of PLAYERS) for (const k of Object.keys(state.players[p].activities || {})) if (!names.includes(k)) names.push(k);
+  return names
+    .filter(n => !n.endsWith(' - Rank'))  // PvP Arena / LMS ratings, not amounts
+    .map((name, i) => metricRow(name, PLAYERS.map(p => {
+      const a = state.players[p].activities;
+      return a && a[name] != null && a[name] >= 0 ? a[name] : null;
+    }), { icon: name, order: i + 1 }));
+}
+
+// sections of the table below the summary: [title, rows, hideEmpty]
+function statsSections() {
+  const acts = activityRows();
+  const firstBoss = acts.findIndex(r => r.label === 'Abyssal Sire');
+  const bosses = firstBoss < 0 ? [] : acts.slice(firstBoss);
+  const clues = acts.filter(r => r.label.startsWith('Clue Scrolls'));
+  const other = acts.filter(r => !bosses.includes(r) && !clues.includes(r));
+  return [['Skills', skillRows(), false], ['Clue scrolls', clues, false], ['Bosses', bosses, true], ['Minigames & other', other, true]];
 }
 
 function statsSortValue(row, key) {
   switch (key) {
-    case 'skill': return SKILL_ORDER.indexOf(row.skill) + 1 || 999;
+    case 'skill': return row.order;
     case 'low': return row.low == null ? -1 : row.low;
     case 'spread': return row.spread == null ? -1 : row.spread;
-    default: {
-      const c = row.cells[+key.slice(1)];
-      return c == null ? -1 : c.level;
-    }
+    default: { const v = row.values[+key.slice(1)]; return v == null ? -1 : v; }
   }
 }
 
 function renderStats() {
   const { key, dir } = state.sort.stats;
-  const rows = state.skills.map(skillRow)
-    .sort((a, b) => {
-      const va = statsSortValue(a, key), vb = statsSortValue(b, key);
-      let c = va < vb ? -1 : va > vb ? 1 : 0;
-      if (c === 0) c = a.skill.localeCompare(b.skill);
-      return c * dir;
-    });
+  const compare = (a, b) => {
+    const va = statsSortValue(a, key), vb = statsSortValue(b, key);
+    let c = va < vb ? -1 : va > vb ? 1 : 0;
+    if (c === 0) c = a.label.localeCompare(b.label);
+    return c * dir;
+  };
 
   const head = STATS_COLUMNS.map(c =>
     `<th class="${c.cls || ''}" data-key="${c.key}">${esc(c.label)}${c.key === key ? `<span class="dir">${dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`).join('');
 
   // shared cell renderer: a background bar plus the number
-  const cell = ({ v, text, title, frac, max, best }) => {
+  const cell = ({ v, text, title, frac, max, best, zero }) => {
     const pct = max ? Math.max(0, Math.min(100, (v / max) * 100)) : 0;
     return `<td class="lv"${title ? ` title="${esc(title)}"` : ''}>`
       + (pct ? `<span class="bar" style="width:${pct.toFixed(1)}%"></span>` : '')
-      + `<span class="v${best ? ' best' : ''}">${esc(text)}${frac ? `<span class="frac">${esc(frac)}</span>` : ''}</span></td>`;
+      + `<span class="v${best ? ' best' : ''}${zero ? ' zero' : ''}">${esc(text)}${frac ? `<span class="frac">${esc(frac)}</span>` : ''}</span></td>`;
   };
   const blank = '<td class="lv"><span class="v none">–</span></td>';
 
@@ -683,19 +715,21 @@ function renderStats() {
       + '</tr>';
   }).join('');
 
-  const body = rows.map(r => {
-    const best = r.high != null && r.low !== r.high;
-    return `<tr><td>${icon(r.skill)}<a href="${esc(wikiUrl(r.skill))}" target="_blank" rel="noopener">${esc(r.skill)}</a></td>`
-      + r.cells.map(c => {
-        if (!c) return blank;
-        return cell({
-          v: c.level, max: MAX_LEVEL, best: best && c.level === r.high, text: String(c.level),
-          title: `Level ${c.level}${c.xp == null ? '' : ' · ' + c.xp.toLocaleString() + ' xp'}`,
-        });
-      }).join('')
-      + (r.low == null ? blank + blank
-        : cell({ v: r.low, max: MAX_LEVEL, text: String(r.low) }) + cell({ v: r.spread, max: MAX_LEVEL, text: String(r.spread) }))
-      + '</tr>';
+  const body = statsSections().map(([title, all, hideEmpty]) => {
+    const rows = (hideEmpty ? all.filter(r => r.high > 0) : all).sort(compare);
+    const note = hideEmpty ? ` <small>${rows.length} of ${all.length} with any count</small>` : '';
+    if (!all.length) return '';
+    return `<tr class="sec"><td colspan="${STATS_COLUMNS.length}">${esc(title)}${note}</td></tr>` + rows.map(r => {
+      const best = r.high != null && r.low !== r.high;
+      const name = r.link ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.label)}</a>` : esc(r.label);
+      return `<tr><td>${icon(r.icon)}${name}</td>`
+        + r.values.map((v, i) => v == null ? blank
+          : cell({ v, max: r.max, best: best && v === r.high, zero: v === 0, text: v.toLocaleString(), title: r.titles[i] || '' })).join('')
+        + (r.low == null ? blank + blank
+          : cell({ v: r.low, max: r.max, zero: r.low === 0, text: r.low.toLocaleString() })
+            + cell({ v: r.spread, max: r.max, zero: r.spread === 0, text: r.spread.toLocaleString() }))
+        + '</tr>';
+    }).join('');
   }).join('');
 
   document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${summary}${body}</tbody>`;

@@ -5,7 +5,7 @@
   - Required items per quest (wiki page "Required Quest Item Totals", parsed here)
   - Tradeability of each item (wiki categories)
   - Quest completion per player (WikiSync; only for players with the plugin)
-  - Levels and XP per player (official hiscores; live, unlike WikiSync)
+  - Levels, XP, clue counts and boss kill counts per player (official hiscores; live)
   - Number of combat achievement tasks (wiki), so the stats tab can show a fraction
   - Skill requirements per quest (from each quest page's infobox wikitext)
 
@@ -230,13 +230,16 @@ def fetch_stats():
     for name in PLAYERS:
         url = HISCORES_URL.format(name=urllib.parse.quote(name))
         try:
+            data = get_json(url)
             skills = {
                 s["name"]: {"level": s["level"], "xp": s["xp"]}
-                for s in get_json(url).get("skills", [])
+                for s in data.get("skills", [])
                 if s.get("level", -1) >= 0
             }
             overall = skills.pop("Overall", None)
-            stats[name] = {"skills": skills, "overall": overall}
+            # clue scrolls, minigames and boss kill counts, in the order the site lists them
+            activities = {a["name"]: a["score"] for a in data.get("activities", [])}
+            stats[name] = {"skills": skills, "overall": overall, "activities": activities}
             total = overall["level"] if overall else "?"
             xp = f"{overall['xp']:,}" if overall else "?"
             print(f"  {name}: total level {total}, {xp} xp")
