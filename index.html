@@ -38,8 +38,8 @@
   /* everything sitting on the stone reads white, the way the real site does */
   header, .tabs, .controls, #status { color: var(--white); }
 
-  /* ---- riveted stone plate: the button art from the hiscores, 9-sliced so it scales ---- */
-  .chip, button {
+  /* ---- riveted stone plate for things you can click: the button art from the hiscores, 9-sliced ---- */
+  button {
     background: none; color: var(--white);
     font: 700 14px/1 Arial, Helvetica, sans-serif;
     text-shadow: 1px 1px 2px #000, 0 0 4px rgba(0,0,0,.8);
@@ -52,7 +52,10 @@
     -webkit-font-smoothing: none; font-smooth: never;
     margin: 0; font-weight: 700; color: #ffd964; text-shadow: 2px 2px 0 #000; }
   .players { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px; }
+  /* player chips are information, not buttons: the site's flat black panel with a thin olive border */
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px 8px;
+    background: #000; border: 1px solid #5a5638; box-shadow: 0 0 0 1px #000, 0 2px 4px rgba(0,0,0,.6);
+    color: var(--white); font: 700 14px/1 Arial, Helvetica, sans-serif; text-shadow: 1px 1px 2px #000; }
   .chip .count { color: var(--green); font-weight: 700; }
   .chip.error { color: #ff9f8c; }
   .chip.stale b { color: #d9c9a8; }   /* played since their last sync */
