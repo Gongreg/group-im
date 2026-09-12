@@ -728,13 +728,18 @@ document.getElementById('table').addEventListener('click', e => {
   else { s.key = key; s.dir = ['name', 'skill', 'difficulty', 'length', 'status', 'tradeable', 'reusable', 'low'].includes(key) ? 1 : -1; }
   render();
 });
+// the chosen tab survives a refresh
+function setView(view) {
+  const b = document.querySelector(`.tabs button[data-view="${view}"]`);
+  if (!b) return;
+  state.view = view;
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
+  document.body.className = 'view-' + view;
+  try { localStorage.setItem('view', view); } catch (e) { /* storage blocked; the tab still switches */ }
+}
 document.querySelector('.tabs').addEventListener('click', e => {
   const b = e.target.closest('button');
-  if (!b) return;
-  state.view = b.dataset.view;
-  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
-  document.body.className = 'view-' + state.view;
-  render();
+  if (b) { setView(b.dataset.view); render(); }
 });
 document.getElementById('q').addEventListener('input', e => { state.filter.q = e.target.value; render(); });
 for (const id of ['hideDone', 'showMini', 'tradeableOnly', 'hideRetired']) {
@@ -766,6 +771,7 @@ function init() {
   const unlinked = state.items.flatMap(it => it.needed).filter(n => !n.quest).length;
   setStatus(`${nq} quests, ${state.quests.length - nq} miniquests, ${state.items.length} items. Data fetched ${new Date(data.fetchedAt).toLocaleString()}.`
     + (unlinked ? ` ${unlinked} item→quest links could not be matched.` : ''));
+  try { setView(localStorage.getItem('view') || state.view); } catch (e) { /* storage blocked */ }
   renderPlayers();
   render();
 }
