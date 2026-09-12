@@ -409,7 +409,10 @@ function itemStatus(item) {
   if (item.tradeable === false) return { code: 'untr', label: 'Untradeable', rank: 3, pending: worth.length, players: playersNeeding.size };
   if (!pending.length) return { code: 'retire', label: 'Retire', rank: 2, pending: 0, players: 0 };
   if (!worth.length) return { code: 'skip', label: 'Skip', rank: 1, pending: 0, players: 0 };
-  return { code: 'keep', label: `Keep · ${worth.length} quest${worth.length > 1 ? 's' : ''} · ${playersNeeding.size} player${playersNeeding.size > 1 ? 's' : ''}`, rank: 0, pending: worth.length, players: playersNeeding.size };
+  // name the players when it is down to one or two of them
+  const who = [...playersNeeding];
+  const whoLabel = who.length <= 2 ? who.join(' & ') : `${who.length} players`;
+  return { code: 'keep', label: `Keep · ${worth.length} quest${worth.length > 1 ? 's' : ''} · ${whoLabel}`, rank: 0, pending: worth.length, players: who.length, who };
 }
 
 // ---------- rendering ----------
@@ -558,7 +561,7 @@ function renderItems() {
     const tr = it.tradeable === true ? '<span class="mark m2">✓</span>' : it.tradeable === false ? '<span class="mark m0">✗</span>' : '<span class="mark mx">?</span>';
     return `<tr>
       <td><a href="${esc(wikiUrl(it.page))}" target="_blank" rel="noopener">${esc(it.name)}</a></td>
-      <td><span class="tag ${st.code}">${esc(st.label)}</span></td>
+      <td><span class="tag ${st.code}"${tipAttr(st.who && st.who.length > 2 ? 'Still needed by ' + st.who.map(esc).join(', ') : '')}>${esc(st.label)}</span></td>
       <td class="st">${tr}</td>
       <td class="st">${it.reusable ? '<span class="mark m2">✓</span>' : ''}</td>
       <td class="num">${it.total == null ? '' : it.total.toLocaleString()}</td>
