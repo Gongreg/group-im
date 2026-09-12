@@ -159,7 +159,7 @@
   .legend .mark, .legend .tag { text-shadow: none; background-color: #e6d8b2; }
 
   /* ---- since your last visit ---- */
-  #news { display: block; width: fit-content; max-width: 100%; margin: 0 auto 16px; padding: 4px 8px 6px; color: var(--white);
+  #news { display: block; width: fit-content; max-width: 100%; margin: 14px auto 6px; padding: 4px 8px 6px; color: var(--white);
     border: 10px solid transparent; border-image: url(assets/stone_button.gif) 10 fill / 10px / 0 round; }
   #news[hidden] { display: none; }
   #news .head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; font-weight: 700; color: #ffd964; text-shadow: 1px 1px 2px #000; }
@@ -232,6 +232,8 @@
   <button data-view="items">Items &amp; group storage</button>
 </div>
 
+<div id="news" hidden></div>
+
 <div class="controls">
   <input type="search" id="q" placeholder="Filter by name">
   <label class="only-quests"><input type="checkbox" id="hideDone" checked> Hide quests everyone finished</label>
@@ -254,7 +256,6 @@
 </div>
 
 <div id="status">Loading…</div>
-<div id="news" hidden></div>
 
 <div class="scroll">
   <div class="wrap">
