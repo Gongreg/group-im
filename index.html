@@ -406,10 +406,10 @@ function itemStatus(item) {
   const worth = pending.filter(n => !n.acquired);
   const playersNeeding = new Set();
   for (const n of worth) for (const p of PLAYERS) if (questStatus(n.quest, p) !== 2) playersNeeding.add(p);
-  if (item.tradeable === false) return { code: 'untr', label: 'Untradeable', rank: 3, pending: worth.length };
-  if (!pending.length) return { code: 'retire', label: 'Retire', rank: 2, pending: 0 };
-  if (!worth.length) return { code: 'skip', label: 'Skip', rank: 1, pending: 0 };
-  return { code: 'keep', label: `Keep · ${worth.length} quest${worth.length > 1 ? 's' : ''} · ${playersNeeding.size} player${playersNeeding.size > 1 ? 's' : ''}`, rank: 0, pending: worth.length };
+  if (item.tradeable === false) return { code: 'untr', label: 'Untradeable', rank: 3, pending: worth.length, players: playersNeeding.size };
+  if (!pending.length) return { code: 'retire', label: 'Retire', rank: 2, pending: 0, players: 0 };
+  if (!worth.length) return { code: 'skip', label: 'Skip', rank: 1, pending: 0, players: 0 };
+  return { code: 'keep', label: `Keep · ${worth.length} quest${worth.length > 1 ? 's' : ''} · ${playersNeeding.size} player${playersNeeding.size > 1 ? 's' : ''}`, rank: 0, pending: worth.length, players: playersNeeding.size };
 }
 
 // ---------- rendering ----------
@@ -521,7 +521,7 @@ const ITEM_COLUMNS = [
 function itemSortValue(it, key, st) {
   switch (key) {
     case 'name': return it.name.toLowerCase();
-    case 'status': return st.rank * 1000 - st.pending;
+    case 'status': return st.rank * 1e6 + st.players * 1e3 + st.pending;
     case 'tradeable': return it.tradeable === true ? 0 : it.tradeable === null ? 1 : 2;
     case 'reusable': return it.reusable ? 0 : 1;
     case 'total': return it.total || 0;
