@@ -5,7 +5,17 @@ on:
     # every 10 minutes, on odd minutes: GitHub delays or drops runs scheduled on the
     # hour and on round minutes when it is busy (wiki data is cached for a day)
     - cron: "7,17,27,37,47,57 * * * *"
-  workflow_dispatch:        # manual "Run workflow" button
+  # Dispatches come from the "Run workflow" button or from an external ping (GitHub's own
+  # scheduler has never fired for this repo). A ping every ten minutes, from any machine:
+  #   curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+  #     https://api.github.com/repos/Gongreg/group-im/actions/workflows/deploy.yml/dispatches -d '{"ref":"main"}'
+  # with a fine-grained token scoped to this repo, Actions: read and write. See tools/ping.sh.
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Deploy even if nothing changed
+        type: boolean
+        default: false
   push:
     branches: [main]
 
@@ -41,8 +51,8 @@ jobs:
           WIKI_CACHE: state/wiki_cache.json
         run: |
           python3 fetch_data.py
-          # deploy when the data changed, or always for a push or a manual run (the code may have changed)
-          if [ "${{ github.event_name }}" != "schedule" ] || [ "$(cat state/last_deploy.txt 2>/dev/null)" != "$(cat data.hash)" ]; then
+          # deploy when the data changed; always for a push (the code changed) or a forced dispatch
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ inputs.force }}" = "true" ] || [ "$(cat state/last_deploy.txt 2>/dev/null)" != "$(cat data.hash)" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"; cp data.hash state/last_deploy.txt; echo "deploying"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"; echo "nothing changed since the last deploy - skipping"
