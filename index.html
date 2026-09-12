@@ -629,7 +629,7 @@ function summaryRows() {
 }
 
 const STATS_COLUMNS = [
-  { key: 'skill', label: 'Skill' },
+  { key: 'skill', label: 'General' },  // the default (in-game) order; clicking it restores that, but it shows no arrow
   ...PLAYERS.map((p, i) => ({ key: 'p' + i, label: p, cls: 'lv' })),
   { key: 'low', label: 'Lowest', cls: 'lv' },
   { key: 'spread', label: 'Spread', cls: 'lv' },
@@ -694,7 +694,7 @@ function renderStats() {
   };
 
   const head = STATS_COLUMNS.map(c =>
-    `<th class="${c.cls || ''}" data-key="${c.key}">${esc(c.label)}${c.key === key ? `<span class="dir">${dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`).join('');
+    `<th class="${c.cls || ''}" data-key="${c.key}">${esc(c.label)}${c.key === key && c.key !== 'skill' ? `<span class="dir">${dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`).join('');
 
   // shared cell renderer: a background bar plus the number
   const cell = ({ v, text, title, frac, max, best, zero }) => {
