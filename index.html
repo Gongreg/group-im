@@ -166,11 +166,17 @@
   #news .head .dim { font-weight: 400; }
   #news .x { margin-left: auto; padding: 0 6px; border: 0; background: none; color: var(--dim); font: 700 16px/1 Arial, sans-serif; cursor: pointer; text-shadow: 1px 1px 2px #000; }
   #news .x:hover { color: var(--white); filter: none; }
-  #news .row { padding: 2px 0; text-shadow: 1px 1px 2px #000; }
-  #news .row b { color: var(--green); margin-right: 6px; }
-  #news .ok { color: var(--green); font-weight: 700; }
+  #news table { border-collapse: collapse; width: auto; }
+  #news th, #news td { padding: 4px 18px 6px 0; border: 0; white-space: nowrap; vertical-align: top;
+    background: none; box-shadow: none; position: static; font-size: 13px; line-height: 1.45; text-shadow: 1px 1px 2px #000; }
+  #news th { color: var(--dim); font-weight: 700; cursor: default; }
+  #news th:hover { color: var(--dim); }
+  #news tr + tr td { border-top: 1px solid rgba(255,255,255,.08); }
+  #news td.who { color: var(--green); font-weight: 700; padding-right: 22px; }
+  #news .ok { color: var(--green); font-weight: 700; margin-right: 3px; }
   #news .dim { color: var(--dim); }
-  #news .icon { margin: 0 3px 0 2px; }
+  #news .icon { margin: 0 4px 0 1px; }
+  #news .mark { min-width: 18px; padding: 0 4px; font-size: 11px; background-color: #e6d8b2; text-shadow: none; }
 
   /* ---- tooltip: instant, html, in place of the browser's delayed title ---- */
   #tip { position: fixed; z-index: 50; max-width: 360px; padding: 6px 10px; pointer-events: none;
@@ -842,29 +848,32 @@ function snapshot() {
   return snap;
 }
 
-// what changed for each player between two snapshots, as html fragments
+// what changed for each player between two snapshots: html lines per category
+const NEWS_COLUMNS = [['quests', 'Quests'], ['levels', 'Levels'], ['acts', 'Clues & bosses'], ['other', 'Diaries & CAs']];
 function changes(prev, cur) {
   const out = [];
   for (const p of PLAYERS) {
     const a = prev[p], b = cur[p];
     if (!a || !b) continue;
-    const items = [];
+    const c = { quests: [], levels: [], acts: [], other: [] };
     for (const [q, st] of Object.entries(b.quests)) {
       const was = a.quests[q] || 0;
-      if (st === 2 && was < 2) items.push(`finished <b>${esc(q)}</b>`);
-      else if (st === 1 && was === 0) items.push(`started ${esc(q)}`);
+      if (st === 2 && was < 2) c.quests.push(`<span class="mark m2">✓</span> ${esc(q)}`);
+      else if (st === 1 && was === 0) c.quests.push(`<span class="mark m1">◐</span> ${esc(q)} <span class="dim">started</span>`);
     }
     for (const [k, v] of Object.entries(b.levels)) {
       const d = v - (a.levels[k] ?? v);
-      if (d > 0) items.push(`<span class="ok">+${d}</span>${icon(k, '')}${esc(k)} <span class="dim">(${v})</span>`);
+      if (d > 0) c.levels.push(`<span class="ok">+${d}</span>${icon(k, '')}${esc(k)} <span class="dim">${v}</span>`);
     }
-    for (const [k, v] of Object.entries(b.activities)) {
-      const d = v - (a.activities[k] ?? v);
-      if (d > 0 && !k.endsWith(' - Rank')) items.push(`<span class="ok">+${d.toLocaleString()}</span>${icon(k, '')}${esc(k)}`);
+    const acts = Object.entries(b.activities).map(([k, v]) => [k, v - (a.activities[k] ?? v)]).filter(([k, d]) => d > 0 && !k.endsWith(' - Rank'));
+    const tiered = acts.some(([k]) => k.startsWith('Clue Scrolls (') && k !== 'Clue Scrolls (all)');
+    for (const [k, d] of acts) {
+      if (k === 'Clue Scrolls (all)' && tiered) continue;  // the tier line already says it
+      c.acts.push(`<span class="ok">+${d.toLocaleString()}</span>${icon(k, '')}${esc(k.replace('Clue Scrolls (', 'Clues (').replace(/\(all\)$/, ''))}`);
     }
-    for (const t of b.diaries) if (!a.diaries.includes(t)) items.push(`completed the <b>${esc(t)}</b> diary`);
-    if (b.ca > a.ca) items.push(`<span class="ok">+${b.ca - a.ca}</span> combat achievement${b.ca - a.ca > 1 ? 's' : ''}`);
-    if (items.length) out.push([p, items]);
+    for (const t of b.diaries) if (!a.diaries.includes(t)) c.other.push(`<span class="mark m2">✓</span> ${esc(t)} diary`);
+    if (b.ca > a.ca) c.other.push(`<span class="ok">+${b.ca - a.ca}</span> combat achievement${b.ca - a.ca > 1 ? 's' : ''}`);
+    if (Object.values(c).some(l => l.length)) out.push([p, c]);
   }
   return out;
 }
@@ -910,8 +919,11 @@ function renderNews(fetchedAt) {
   const list = store.prev && !store.dismissed ? changes(store.prev, now) : [];
   el.hidden = !list.length;
   if (!list.length) return;
+  const cols = NEWS_COLUMNS.filter(([k]) => list.some(([, c]) => c[k].length));
   el.innerHTML = `<div class="head">Since your last visit <span class="dim">(${ago(Date.now() - store.prevSeenAt)}${preview ? ' · preview' : ''})</span><button class="x" title="dismiss">×</button></div>`
-    + list.map(([p, items]) => `<div class="row"><b>${esc(p)}</b>${items.join(' · ')}</div>`).join('');
+    + `<table><tr><th></th>${cols.map(([, label]) => `<th>${label}</th>`).join('')}</tr>`
+    + list.map(([p, c]) => `<tr><td class="who">${esc(p)}</td>${cols.map(([k]) => `<td>${c[k].map(l => `<div>${l}</div>`).join('') || '<span class="dim">–</span>'}</td>`).join('')}</tr>`).join('')
+    + '</table>';
   el.querySelector('.x').onclick = () => {
     store.dismissed = true;
     try { localStorage.setItem('visit', JSON.stringify(store)); } catch (e) { /* ignore */ }
