@@ -770,7 +770,8 @@ function summaryRows() {
     const r = state.players[p];
     if (!r.skills) return null;
     const v = r.overall ? r.overall.level : Object.values(r.skills).reduce((n, s) => n + s.level, 0);
-    return { v, text: v.toLocaleString(), max: state.skills.length * MAX_LEVEL };
+    const max = state.skills.length * MAX_LEVEL;
+    return { v, text: v.toLocaleString(), frac: '/' + max.toLocaleString(), max };
   });
   add('Total XP', p => {
     const r = state.players[p];
@@ -781,7 +782,7 @@ function summaryRows() {
   });
   add('Combat level', p => {
     const r = state.players[p];
-    return r.skills ? { v: combatLevel(r.skills), text: String(combatLevel(r.skills)), max: 126 } : null;
+    return r.skills ? { v: combatLevel(r.skills), text: String(combatLevel(r.skills)), frac: '/126', max: 126 } : null;
   });
   add('Quests', p => {
     if (state.players[p].status !== 'ok') return null;
