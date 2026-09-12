@@ -203,6 +203,7 @@
   td.lv .v { position: relative; }
   td.lv .v.best { color: var(--ok); font-weight: 700; }
   td.lv .v.none { color: var(--unk); }
+  td.lv .up { color: var(--ok); font-weight: 700; }
   tr.sum td { background: var(--sum-bg); }
   tr.sum td:first-child { font-weight: 700; }
   tr.sum.last td { border-bottom: 2px solid rgba(70,48,14,.7); }
@@ -676,6 +677,12 @@ function summaryRows() {
     if (state.players[p].status !== 'ok') return null;
     return frac(quests.reduce((n, q) => n + (questStatus(q, p) === 2 ? q.qp : 0), 0), totalQp);
   }, { ico: 'Quest point' });
+  const targets = Object.fromEntries(PLAYERS.map(p => [p, unlocksBySkill(p)]));
+  add('Training targets', p => {
+    if (!state.players[p].skills || state.players[p].status !== 'ok') return null;
+    const n = new Set(Object.values(targets[p]).flat().map(e => e.quest.name)).size;
+    return { v: n, text: n.toLocaleString() };
+  }, { note: 'quests where one skill is all that is missing - click for which skill, and how far', toggle: 'targets', expand: () => targetRows(targets) });
   add('Diary tiers', p => {
     const d = (state.players[p].raw || {}).achievement_diaries;
     if (!d) return null;
@@ -695,6 +702,44 @@ function summaryRows() {
     return frac(vals.filter(Boolean).length, vals.length);
   });
   return rows;
+}
+
+// ---- training targets: quests where a single skill is all that is missing ----
+// skill -> [{ level, quest }] for one player; an "or" group counts under each of its options
+function unlocksBySkill(p) {
+  const out = {};
+  for (const q of state.quests) {
+    if (!q.reqs.length || questStatus(q, p) === 2) continue;
+    const groups = reqGroups(q, p);
+    if (!groups) continue;
+    const unmet = groups.filter(g => !g.met);
+    if (unmet.length !== 1) continue;
+    for (const r of unmet[0].reqs) {
+      if (r.skill === 'Quest' || r.skill === 'Combat' || r.skill.includes('+')) continue;
+      (out[r.skill] = out[r.skill] || []).push({ level: r.level, quest: q });
+    }
+  }
+  return out;
+}
+
+// one row per skill (most unlocks first): each player's cheapest step and what it opens
+function targetRows(targets) {
+  const totals = {};
+  for (const p of PLAYERS) for (const [k, list] of Object.entries(targets[p])) totals[k] = (totals[k] || 0) + list.length;
+  return Object.keys(totals).sort((a, b) => totals[b] - totals[a] || a.localeCompare(b)).map(k =>
+    `<tr class="sum sub"><td>${icon(k)}<a href="${esc(wikiUrl(k))}" target="_blank" rel="noopener">${esc(k)}</a></td>` + PLAYERS.map(p => {
+      const list = (targets[p][k] || []).slice().sort((a, b) => a.level - b.level || a.quest.name.localeCompare(b.quest.name));
+      if (!list.length) return '<td class="lv"><span class="v none">–</span></td>';
+      const has = levelFor(p, k);
+      const steps = [];
+      for (const e of list) {
+        const last = steps[steps.length - 1];
+        if (last && last.level === e.level) last.quests.push(e.quest.name); else steps.push({ level: e.level, quests: [e.quest.name] });
+      }
+      const tip = steps.map(st => `<b>${esc(k)} ${st.level}</b> <span class="dim">+${st.level - has}</span><br>${st.quests.map(esc).join('<br>')}`).join('<br>');
+      const first = steps[0], n = first.quests.length;
+      return `<td class="lv"${tipAttr(tip)}><span class="v"><span class="up">+${first.level - has}</span> → ${first.level}<span class="frac"> · ${n} quest${n > 1 ? 's' : ''}${steps.length > 1 ? ', more at ' + steps[1].level : ''}</span></span></td>`;
+    }).join('') + '</tr>').join('');
 }
 
 // one row per diary region: each player's four tiers as chips that fill with task progress
