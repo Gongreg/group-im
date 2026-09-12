@@ -175,7 +175,7 @@
   td.lv .frac { color: var(--muted); font-weight: 400; }
 </style>
 </head>
-<body class="view-quests">
+<body class="view-stats">
 
 <header>
   <h1>Suldu Buldu</h1>
@@ -183,9 +183,9 @@
 </header>
 
 <div class="tabs">
-  <button data-view="quests" class="active">Quests</button>
+  <button data-view="stats" class="active">Stats</button>
+  <button data-view="quests">Quests</button>
   <button data-view="items">Items &amp; group storage</button>
-  <button data-view="stats">Stats</button>
 </div>
 
 <div class="controls">
@@ -228,7 +228,7 @@ const LENGTH = ['Very Short', 'Short', 'Medium', 'Long', 'Very Long'];
 
 // ---------- state ----------
 const state = {
-  view: 'quests',
+  view: 'stats',
   quests: [],        // { name, url, type, members, difficulty, length, qp, series, release, items: [] }
   items: [],         // { name, page, reusable, total, tradeable, needed: [{ page, qty, acquired, quest }] }
   players: {},       // name -> { status, quests: { normName -> 0|1|2 }, skills: { skill -> { level, xp } }, raw }
