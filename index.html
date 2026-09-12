@@ -1117,7 +1117,7 @@ function renderNight() {
   const section = (title, note) => `<tr class="sec"><td colspan="6">${title}${note ? ` <small>${note}</small>` : ''}</td></tr>`;
   let html = `<thead><tr><th>Quest</th><th>Difficulty</th><th>Length</th><th class="st">Impact</th><th>Rewards</th></tr></thead><tbody>`;
   html += section('Ready for all five', noData.length ? `${noData.join(', ')} ${noData.length > 1 ? 'have' : 'has'} no data, so not counted` : 'nobody has done these, everybody meets the requirements');
-  html += ready.length ? ready.map(questRow).join('') : '<tr><td colspan="5" class="dim">Nothing right now - see who is holding what up below.</td></tr>';
+  html += ready.length ? ready.map(r => questRow(r)).join('') : '<tr><td colspan="5" class="dim">Nothing right now - see who is holding what up below.</td></tr>';
   if (almost.length) {
     html += section('One person short', 'everyone else is ready');
     html += almost.map(r => { const i = r.st.findIndex(s => !s.ok);
