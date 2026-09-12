@@ -67,8 +67,9 @@
   .controls label { display: inline-flex; gap: 7px; align-items: center; cursor: pointer;
     color: var(--white); font-weight: 700; text-shadow: 1px 1px 2px #000; }
   .controls input[type=checkbox] { accent-color: #6b8f2c; width: 16px; height: 16px; }
-  .controls .only-quests, .controls .only-items, .controls .only-stats { display: none; }
-  body.view-quests .only-quests, body.view-items .only-items, body.view-stats .only-stats { display: inline-flex; }
+  .controls .only-quests, .controls .only-items { display: none; }
+  body.view-quests .only-quests, body.view-items .only-items { display: inline-flex; }
+  body.view-stats .controls { display: none; }
   button { cursor: pointer; }
   button:hover { filter: brightness(1.3); }
   .tabs button.active:hover { filter: brightness(1.6) contrast(.95); }
@@ -184,14 +185,12 @@
   <label class="only-quests"><input type="checkbox" id="showMini" checked> Include miniquests</label>
   <label class="only-items"><input type="checkbox" id="tradeableOnly" checked> Tradeable only</label>
   <label class="only-items"><input type="checkbox" id="hideRetired"> Hide retired</label>
-  <label class="only-stats"><input type="checkbox" id="showXp"> Show XP instead of levels</label>
   <span class="legend only-quests">
     <span><span class="mark m2">✓</span> done</span>
     <span><span class="mark m1">◐</span> in progress</span>
     <span><span class="mark m0">✗</span> not started</span>
     <span><span class="mark m0">3</span> not started, 3 skills short (hover for which)</span>
     <span><span class="mark mx">–</span> no data</span>
-    <span><i>italic item</i> = obtained during the quest</span>
   </span>
   <span class="legend only-items">
     <span><span class="tag keep">Keep</span> a pending quest still needs it</span>
@@ -227,7 +226,7 @@ const state = {
   skills: [],        // ordered skill names present in the data
   sort: { quests: { key: 'done', dir: -1 }, items: { key: 'status', dir: 1 }, stats: { key: 'skill', dir: 1 } },
   expanded: new Set(),  // quest pages whose item list is open
-  filter: { q: '', hideDone: true, showMini: true, tradeableOnly: true, hideRetired: false, showXp: false },
+  filter: { q: '', hideDone: true, showMini: true, tradeableOnly: true, hideRetired: false },
 };
 
 const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -627,9 +626,8 @@ const STATS_COLUMNS = [
 ];
 
 function skillRow(skill) {
-  const showXp = state.filter.showXp;
   const cells = PLAYERS.map(p => skillOf(p, skill));
-  const nums = cells.map(c => c && (showXp ? c.xp : c.level)).filter(n => n != null);
+  const nums = cells.map(c => c && c.level).filter(n => n != null);
   const low = nums.length ? Math.min(...nums) : null;
   const high = nums.length ? Math.max(...nums) : null;
   return { skill, cells, low, high, spread: nums.length ? high - low : null };
@@ -642,17 +640,14 @@ function statsSortValue(row, key) {
     case 'spread': return row.spread == null ? -1 : row.spread;
     default: {
       const c = row.cells[+key.slice(1)];
-      return c == null ? -1 : (state.filter.showXp ? c.xp : c.level);
+      return c == null ? -1 : c.level;
     }
   }
 }
 
 function renderStats() {
   const { key, dir } = state.sort.stats;
-  const showXp = state.filter.showXp;
-  const needle = state.filter.q.trim().toLowerCase();
   const rows = state.skills.map(skillRow)
-    .filter(r => !needle || r.skill.toLowerCase().includes(needle))
     .sort((a, b) => {
       const va = statsSortValue(a, key), vb = statsSortValue(b, key);
       let c = va < vb ? -1 : va > vb ? 1 : 0;
@@ -672,17 +667,17 @@ function renderStats() {
   };
   const blank = '<td class="lv"><span class="v none">–</span></td>';
 
-  const sums = needle ? [] : summaryRows();
+  const sums = summaryRows();
   const summary = sums.map((row, i) => {
     const vals = row.cells.filter(Boolean).map(c => c.v);
     const high = vals.length ? Math.max(...vals) : null;
     const low = vals.length ? Math.min(...vals) : null;
     const lead = vals.length > 1 && low !== high;
-    // rows without an absolute maximum get bars scaled to the group leader
-    const rowMax = (row.cells.find(Boolean) || {}).max || high;
+    // bars only where there is a real ceiling (total XP has none, so it gets no bar)
+    const rowMax = (row.cells.find(Boolean) || {}).max;
     return `<tr class="sum${i === sums.length - 1 ? ' last' : ''}"><td title="${esc(row.note || '')}">`
       + (row.ico ? icon(row.ico, '') : '') + `${esc(row.label)}</td>`
-      + row.cells.map(c => c ? cell({ ...c, max: c.max || high, best: lead && c.v === high }) : blank).join('')
+      + row.cells.map(c => c ? cell({ ...c, best: lead && c.v === high }) : blank).join('')
       + (low == null ? blank + blank
         : cell({ v: low, max: rowMax, text: row.fmt(low) }) + cell({ v: high - low, text: row.fmt(high - low) }))
       + '</tr>';
@@ -693,17 +688,13 @@ function renderStats() {
     return `<tr><td>${icon(r.skill)}<a href="${esc(wikiUrl(r.skill))}" target="_blank" rel="noopener">${esc(r.skill)}</a></td>`
       + r.cells.map(c => {
         if (!c) return blank;
-        const n = showXp ? c.xp : c.level;
-        if (n == null) return blank;
         return cell({
-          v: c.level, max: MAX_LEVEL, best: best && n === r.high,
-          text: showXp ? fmtXp(c.xp) : String(c.level),
+          v: c.level, max: MAX_LEVEL, best: best && c.level === r.high, text: String(c.level),
           title: `Level ${c.level}${c.xp == null ? '' : ' · ' + c.xp.toLocaleString() + ' xp'}`,
         });
       }).join('')
       + (r.low == null ? blank + blank
-        : cell({ v: r.low, max: showXp ? r.high : MAX_LEVEL, text: showXp ? fmtXp(r.low) : String(r.low) })
-          + cell({ v: r.spread, max: showXp ? 0 : MAX_LEVEL, text: showXp ? fmtXp(r.spread) : String(r.spread) }))
+        : cell({ v: r.low, max: MAX_LEVEL, text: String(r.low) }) + cell({ v: r.spread, max: MAX_LEVEL, text: String(r.spread) }))
       + '</tr>';
   }).join('');
 
@@ -746,7 +737,7 @@ document.querySelector('.tabs').addEventListener('click', e => {
   render();
 });
 document.getElementById('q').addEventListener('input', e => { state.filter.q = e.target.value; render(); });
-for (const id of ['hideDone', 'showMini', 'tradeableOnly', 'hideRetired', 'showXp']) {
+for (const id of ['hideDone', 'showMini', 'tradeableOnly', 'hideRetired']) {
   document.getElementById(id).addEventListener('change', e => { state.filter[id] = e.target.checked; render(); });
 }
 
