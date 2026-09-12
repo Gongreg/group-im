@@ -922,7 +922,7 @@ const RULES = {
   'Dragon scimitar': RULE.quest('Monkey Madness I'), 'Dragon dagger': RULE.quest('Lost City'),
   'Helm of neitiznot': RULE.quest('The Fremennik Isles'), 'Barrows gloves': RULE.quest('Recipe for Disaster'), 'Book of the dead': RULE.quest('A Kingdom Divided'),
   "Ava's accumulator": RULE.all(RULE.quest('Animal Magnetism'), RULE.level('Ranged', 50)),
-  "Ava's assembler": p => { const q = RULE.quest('Dragon Slayer II')(p); return q.has ? unknown("Dragon Slayer II done - needs a Vorkath's head") : q; },
+  "Ava's assembler": p => { const q = RULE.quest('Dragon Slayer II')(p); if (!q.has) return q; const log = logOf(p); return !log ? unknown("Dragon Slayer II done - collection log not synced yet") : { has: log.has(21907), why: log.has(21907) ? "Vorkath's head in the log" : "no Vorkath's head in the log yet" }; },
   'Spellbook Swap': RULE.all(RULE.quest('Dream Mentor'), RULE.level('Magic', 96)),
   'Wrath rune': RULE.all(RULE.quest('Dragon Slayer II'), RULE.level('Runecraft', 95)),
   'Crystal halberd': RULE.quest('Roving Elves'),
@@ -937,6 +937,40 @@ const RULES = {
   'Spirit tree': RULE.all(RULE.poh(75), RULE.level('Farming', 83)), 'Dark altar': RULE.poh(80), 'Rejuvenation pool': RULE.poh(80), 'Basic jewellery box': RULE.poh(81),
   'Fairy ring': RULE.poh(85), 'Occult altar': RULE.poh(90), 'Ornate jewellery box': RULE.poh(91), 'Ornate rejuvenation pool': RULE.poh(90),
 };
+// chart items the log never lists as such: the log item(s) that imply them, or a component
+// several items share, which the log cannot resolve into one of them
+const LOG_ALIAS = {
+  'Berserker ring (i)': { ids: [6737], note: 'Berserker ring in the log; the imbue is not tracked' },
+  'Black mask (i)': { ids: [8901], note: 'Black mask in the log; the imbue is not tracked' },
+  'Slayer helmet (i)': { ids: [8901], note: 'Black mask in the log; the helmet and imbue are not tracked' },
+  'Abyssal tentacle': { ids: [12004, 4151], note: 'Kraken tentacle and Abyssal whip in the log' },
+  'Bandos godsword': { ids: [11812], note: 'Bandos hilt in the log' },
+  'Zamorakian hasta': { ids: [11824], note: 'Zamorakian spear in the log; the hasta is not tracked' },
+  'Primordial boots': { ids: [13231, 11840], note: 'Primordial crystal and Dragon boots in the log' },
+  'Eternal boots': { ids: [13227], note: 'Eternal crystal in the log' },
+  'Toxic blowpipe': { ids: [12922], note: 'Tanzanite fang in the log' },
+  'Scythe of vitur': { ids: [22486] },
+  "Tumeken's shadow": { ids: [27277] },
+  'Avernic defender': { ids: [22477, 12954], note: 'Avernic defender hilt and Dragon defender in the log' },
+  'Ultor ring': { ids: [28285], note: 'Ultor vestige in the log' },
+  'Magus ring': { ids: [28281], note: 'Magus vestige in the log' },
+  'Masori body (f)': { ids: [27229], note: 'Masori body in the log; fortifying is not tracked' },
+  'Masori chaps (f)': { ids: [27232], note: 'Masori chaps in the log; fortifying is not tracked' },
+  'Masori mask (f)': { ids: [27226], note: 'Masori mask in the log; fortifying is not tracked' },
+  'Warped sceptre': { ids: [28583] },
+  "Pharaoh's sceptre": { ids: [26945] },
+  'Eye of ayak': { ids: [31115] },
+  'Ferocious gloves': { ids: [22983], note: 'Hydra leather in the log' },
+  'Burning claws': { ids: [29574], note: 'Burning claw in the log; it takes two' },
+  'Amulet of rancour': { ids: [29799], note: 'Araxyte fang in the log; the torture it goes on is not tracked' },
+  'Voidwaker': { ids: [27684, 27681, 27687], note: 'blade, hilt and gem all in the log' },
+  'Amulet of torture': { shared: 19529, part: 'Zenyte shard' }, 'Necklace of anguish': { shared: 19529, part: 'Zenyte shard' },
+  'Tormented bracelet': { shared: 19529, part: 'Zenyte shard' }, 'Ring of suffering (i)': { shared: 19529, part: 'Zenyte shard' },
+  'Crystal body': { shared: 23956, part: 'Crystal armour seed' }, 'Crystal legs': { shared: 23956, part: 'Crystal armour seed' }, 'Crystal helm': { shared: 23956, part: 'Crystal armour seed' },
+  'Bow of faerdhinen (c)': { shared: 25859, part: 'Enhanced crystal weapon seed' },
+  'Emberlight': { shared: 29580, part: 'Tormented synapse' }, 'Scorching bow': { shared: 29580, part: 'Tormented synapse' },
+  'Arclight': { shared: 19677, part: 'Ancient shard' },
+};
 // the WikiSync collection log, as a set of item ids, if the player has synced it
 function logOf(p) {
   const raw = (state.players[p].raw || {}).collection_log;
@@ -946,14 +980,21 @@ function logOf(p) {
 function milestoneState(node, p) {
   if (!state.players[p].skills) return unknown('no data for this player');
   if (RULES[node.name]) return RULES[node.name](p);
+  const alias = LOG_ALIAS[node.name];
+  if (!node.log && !alias) return unknown('nothing tracks this one');
   const log = logOf(p);
-  if (log && node.id != null) return { has: log.has(node.id), why: log.has(node.id) ? 'in the collection log' : 'not in the collection log' };
-  return unknown(node.id != null ? 'collection log not synced yet - open it in game with the WikiSync plugin' : 'nothing tracks this one');
+  if (!log) return unknown('collection log not synced yet - open it in game and press the WikiSync button');
+  if (node.log) return { has: log.has(node.id), why: log.has(node.id) ? 'in the collection log' : 'not in the collection log' };
+  if (alias.shared) return log.has(alias.shared) ? unknown(`${alias.part} in the log - which item it became is not tracked`) : { has: false, why: `no ${alias.part} in the log yet` };
+  const has = alias.ids.every(id => log.has(id));
+  return { has, why: has ? (alias.note || 'in the collection log') : (alias.note ? alias.note.replace(/ in the log.*/, ' not in the log yet') : 'not in the collection log') };
 }
 const LEVEL_NODE_ICON = { '69 slayer': 'Slayer', '86 strength': 'Strength', '70 ranged': 'Ranged', '92 ranged': 'Ranged' };
 function howLabel(node) {
   if (RULES[node.name]) return '';
-  return node.id != null ? 'collection log' : 'not tracked';
+  if (node.log) return 'collection log';
+  const a = LOG_ALIAS[node.name];
+  return a ? (a.shared ? `collection log · ${a.part}` : 'collection log · component') : 'not tracked';
 }
 
 function renderProgress() {
