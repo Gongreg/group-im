@@ -158,6 +158,20 @@
   .legend b { font-weight: 700; }
   .legend .mark, .legend .tag { text-shadow: none; background-color: #e6d8b2; }
 
+  /* ---- since your last visit ---- */
+  #news { display: inline-block; max-width: 100%; margin: 0 0 16px; padding: 4px 8px 6px; color: var(--white);
+    border: 10px solid transparent; border-image: url(assets/stone_button.gif) 10 fill / 10px / 0 round; }
+  #news[hidden] { display: none; }
+  #news .head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; font-weight: 700; color: #ffd964; text-shadow: 1px 1px 2px #000; }
+  #news .head .dim { font-weight: 400; }
+  #news .x { margin-left: auto; padding: 0 6px; border: 0; background: none; color: var(--dim); font: 700 16px/1 Arial, sans-serif; cursor: pointer; text-shadow: 1px 1px 2px #000; }
+  #news .x:hover { color: var(--white); filter: none; }
+  #news .row { padding: 2px 0; text-shadow: 1px 1px 2px #000; }
+  #news .row b { color: var(--green); margin-right: 6px; }
+  #news .ok { color: var(--green); font-weight: 700; }
+  #news .dim { color: var(--dim); }
+  #news .icon { margin: 0 3px 0 2px; }
+
   /* ---- tooltip: instant, html, in place of the browser's delayed title ---- */
   #tip { position: fixed; z-index: 50; max-width: 360px; padding: 6px 10px; pointer-events: none;
     background: rgba(18,14,8,.96); border: 1px solid #8f7d57; border-radius: 3px; color: #fff;
@@ -234,6 +248,7 @@
 </div>
 
 <div id="status">Loading…</div>
+<div id="news" hidden></div>
 
 <div class="scroll">
   <div class="wrap">
@@ -806,6 +821,81 @@ function setStatus(msg, isError) {
   document.getElementById('status').innerHTML = isError ? `<span class="err">${esc(msg)}</span>` : esc(msg);
 }
 
+// ---------- since your last visit ----------
+// A compact snapshot of everything that can change is kept in localStorage. "Last visit"
+// means the previous *different* build of the data you loaded, so reloading keeps the
+// same panel until the site has actually rebuilt with new numbers.
+function snapshot() {
+  const snap = {};
+  for (const p of PLAYERS) {
+    const r = state.players[p];
+    if (r.status !== 'ok' && !r.skills) continue;
+    const quests = {};
+    for (const q of state.quests) { const st = questStatus(q, p); if (st > 0) quests[q.name] = st; }
+    const levels = {};
+    for (const [k, v] of Object.entries(r.skills || {})) levels[k] = v.level;
+    const diaries = [];
+    for (const [region, tiers] of Object.entries((r.raw || {}).achievement_diaries || {}))
+      for (const [t, tier] of Object.entries(tiers)) if (tier.complete) diaries.push(`${region} ${t}`);
+    snap[p] = { quests, levels, activities: { ...(r.activities || {}) }, diaries, ca: ((r.raw || {}).combat_achievements || []).length };
+  }
+  return snap;
+}
+
+// what changed for each player between two snapshots, as html fragments
+function changes(prev, cur) {
+  const out = [];
+  for (const p of PLAYERS) {
+    const a = prev[p], b = cur[p];
+    if (!a || !b) continue;
+    const items = [];
+    for (const [q, st] of Object.entries(b.quests)) {
+      const was = a.quests[q] || 0;
+      if (st === 2 && was < 2) items.push(`finished <b>${esc(q)}</b>`);
+      else if (st === 1 && was === 0) items.push(`started ${esc(q)}`);
+    }
+    for (const [k, v] of Object.entries(b.levels)) {
+      const d = v - (a.levels[k] ?? v);
+      if (d > 0) items.push(`<span class="ok">+${d}</span>${icon(k, '')}${esc(k)} <span class="dim">(${v})</span>`);
+    }
+    for (const [k, v] of Object.entries(b.activities)) {
+      const d = v - (a.activities[k] ?? v);
+      if (d > 0 && !k.endsWith(' - Rank')) items.push(`<span class="ok">+${d.toLocaleString()}</span>${icon(k, '')}${esc(k)}`);
+    }
+    for (const t of b.diaries) if (!a.diaries.includes(t)) items.push(`completed the <b>${esc(t)}</b> diary`);
+    if (b.ca > a.ca) items.push(`<span class="ok">+${b.ca - a.ca}</span> combat achievement${b.ca - a.ca > 1 ? 's' : ''}`);
+    if (items.length) out.push([p, items]);
+  }
+  return out;
+}
+
+function ago(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `${Math.max(m, 1)} min ago`;
+  if (m < 48 * 60) return `${Math.round(m / 60)} h ago`;
+  return `${Math.round(m / 1440)} days ago`;
+}
+
+function renderNews(fetchedAt) {
+  const el = document.getElementById('news');
+  let store = {};
+  try { store = JSON.parse(localStorage.getItem('visit') || '{}'); } catch (e) { /* ignore */ }
+  const now = snapshot();
+  if (!store.cur) store = { cur: now, curAt: fetchedAt, seenAt: Date.now() };
+  else if (store.curAt !== fetchedAt) store = { prev: store.cur, prevSeenAt: store.seenAt, cur: now, curAt: fetchedAt, seenAt: Date.now() };
+  try { localStorage.setItem('visit', JSON.stringify(store)); } catch (e) { /* storage full or blocked */ }
+  const list = store.prev && !store.dismissed ? changes(store.prev, now) : [];
+  el.hidden = !list.length;
+  if (!list.length) return;
+  el.innerHTML = `<div class="head">Since your last visit <span class="dim">(${ago(Date.now() - store.prevSeenAt)})</span><button class="x" title="dismiss">×</button></div>`
+    + list.map(([p, items]) => `<div class="row"><b>${esc(p)}</b>${items.join(' · ')}</div>`).join('');
+  el.querySelector('.x').onclick = () => {
+    store.dismissed = true;
+    try { localStorage.setItem('visit', JSON.stringify(store)); } catch (e) { /* ignore */ }
+    el.hidden = true;
+  };
+}
+
 // ---------- tooltip ----------
 const tipEl = document.getElementById('tip');
 let tipFor = null;
@@ -901,6 +991,7 @@ function init() {
   try { setView(localStorage.getItem('view') || state.view); } catch (e) { /* storage blocked */ }
   renderPlayers();
   render();
+  renderNews(data.fetchedAt);
 }
 init();
 </script>
