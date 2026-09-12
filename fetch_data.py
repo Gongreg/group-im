@@ -7,7 +7,7 @@
   - Quest completion per player (WikiSync; only for players with the plugin)
   - Levels, XP, clue counts and boss kill counts per player (official hiscores; live)
   - Number of combat achievement tasks (wiki), so the stats tab can show a fraction
-  - Skill requirements, prerequisite quests and rewards per quest (from each quest page's wikitext)
+  - Skill requirements, item skills, prerequisite quests and rewards per quest (from each quest page's wikitext)
   - Collection log history: WikiSync lists the log in a fixed order, so when each item
     was gained is recorded here by diffing against the previous run (HISTORY file)
 
@@ -41,6 +41,7 @@ USER_AGENT = "osrs-quest-tracker/1.1 (personal tool for a friend group)"
 HISTORY = os.environ.get("HISTORY", "history/collection_log.json")
 WIKI_CACHE = os.environ.get("WIKI_CACHE", "history/wiki_cache.json")
 WIKI_CACHE_TTL = 24 * 3600
+WIKI_CACHE_VERSION = 2  # bump when the cached shape changes, so old caches are refetched
 WIKI_IMAGES = "https://oldschool.runescape.wiki/images/"
 
 
@@ -290,17 +291,20 @@ SCP_RE = re.compile(r"\{\{SCP\|([^|}]+)\|(\d+)[^}]*\}\}(?:\s*\{\{Boostable\|(yes
 SUM_RE = re.compile(r"sum of your \[\[(\w+)\]\] and \[\[(\w+)\]\] must be at or above (\d+)", re.I)
 
 
+def infobox_field(name, wikitext):
+    """One |field= of a quest infobox, up to the next field or the closing braces."""
+    m = re.search(r"\|\s*%s\s*=(.*?)(?=\n\|\s*[a-z]+\s*=|\n\}\})" % name, wikitext, re.S | re.I)
+    return m.group(1) if m else ""
+
+
 def parse_reqs(wikitext):
     """Skill requirements from the infobox's |requirements= list.
 
     Each line is one requirement; a line offering alternatives ("40 Attack or
     40 Strength") is tagged so the page can treat it as any-of.
     """
-    m = re.search(r"\|\s*requirements\s*=(.*?)(?=\n\|\s*[a-z]+\s*=|\n\}\})", wikitext, re.S | re.I)
-    if not m:
-        return []
     reqs = []
-    for n, line in enumerate(m.group(1).split("\n")):
+    for n, line in enumerate(infobox_field("requirements", wikitext).split("\n")):
         found = SCP_RE.findall(line)
         total = SUM_RE.search(line)
         if total:
@@ -311,6 +315,22 @@ def parse_reqs(wikitext):
                 req["or"] = n
             reqs.append(req)
     return reqs
+
+
+def parse_item_skills(wikitext):
+    """Skill levels named in the infobox's |items= list.
+
+    These are never hard requirements - they are the levels to make or gather
+    something you could also buy, find, or get as a drop (the lyre in The
+    Fremennik Trials, say, which the requirements field never mentions). Only
+    the highest level per skill is kept, which is what gathering the lot needs.
+    """
+    best = {}
+    for skill, level, boost in SCP_RE.findall(infobox_field("items", wikitext)):
+        skill, level = skill.strip(), int(level)
+        if skill not in best or level > best[skill]["level"]:
+            best[skill] = {"skill": skill, "level": level, "boostable": boost.lower() == "yes"}
+    return sorted(best.values(), key=lambda r: (-r["level"], r["skill"]))
 
 
 XP_RE = re.compile(r"\{\{SCP\|([A-Za-z ]+)\|([\d,]+)[^}]*\}\}", re.I)
@@ -328,22 +348,20 @@ def clean_wikitext(line: str) -> str:
 def parse_quest_page(wikitext, quest_titles):
     """Direct prerequisite quests and rewards (xp per skill, and everything else as lines)."""
     prereqs = []
-    m = re.search(r"\|\s*requirements\s*=(.*?)(?=\n\|\s*[a-z]+\s*=|\n\}\})", wikitext, re.S | re.I)
-    if m:
-        # a quest link is a sub-prerequisite (skip it) when the bullet it nests under is itself a quest
-        stack = []  # (depth, is_quest_line) of the enclosing bullets
-        for line in m.group(1).split("\n"):
-            bullets = re.match(r"\s*(\*+)", line)
-            if not bullets:
-                continue
-            depth = len(bullets.group(1))
-            links = [t for t in re.findall(r"\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]", line) if t in quest_titles]
-            while stack and stack[-1][0] >= depth:
-                stack.pop()
-            nested = bool(stack) and stack[-1][1]
-            if links and not nested:
-                prereqs.extend(t for t in links if t not in prereqs)
-            stack.append((depth, bool(links)))
+    # a quest link is a sub-prerequisite (skip it) when the bullet it nests under is itself a quest
+    stack = []  # (depth, is_quest_line) of the enclosing bullets
+    for line in infobox_field("requirements", wikitext).split("\n"):
+        bullets = re.match(r"\s*(\*+)", line)
+        if not bullets:
+            continue
+        depth = len(bullets.group(1))
+        links = [t for t in re.findall(r"\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]", line) if t in quest_titles]
+        while stack and stack[-1][0] >= depth:
+            stack.pop()
+        nested = bool(stack) and stack[-1][1]
+        if links and not nested:
+            prereqs.extend(t for t in links if t not in prereqs)
+        stack.append((depth, bool(links)))
     xp, other = [], []
     body = rewards_block(wikitext)
     if body:
@@ -362,7 +380,8 @@ def parse_quest_page(wikitext, quest_titles):
     m = re.search(r"==\s*Required for completing\s*==(.*?)(?=\n==[^=]|\Z)", wikitext, re.S | re.I)
     if m:
         required_for = [t for t in re.findall(r"\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]", m.group(1)) if t in quest_titles]
-    return {"prereqs": prereqs, "requiredFor": required_for, "xp": xp, "rewards": other}
+    return {"prereqs": prereqs, "requiredFor": required_for, "xp": xp, "rewards": other,
+            "itemSkills": parse_item_skills(wikitext)}
 
 
 def rewards_block(wikitext):
@@ -515,7 +534,7 @@ def wiki_data(refresh: bool = False):
             with open(WIKI_CACHE, encoding="utf-8") as f:
                 cache = json.load(f)
             age = time.time() - cache.get("at", 0)
-            if age < WIKI_CACHE_TTL:
+            if age < WIKI_CACHE_TTL and cache.get("v") == WIKI_CACHE_VERSION:
                 print(f"Using wiki data cached {age / 3600:.1f} h ago")
                 return cache
         except (OSError, ValueError):
@@ -534,7 +553,8 @@ def wiki_data(refresh: bool = False):
     ca_total = fetch_ca_total()
     print(f"  {ca_total} tasks")
 
-    cache = {"at": time.time(), "listHtml": list_html, "items": items, "reqs": reqs, "questInfo": quest_info, "caTotal": ca_total}
+    cache = {"at": time.time(), "v": WIKI_CACHE_VERSION, "listHtml": list_html, "items": items,
+             "reqs": reqs, "questInfo": quest_info, "caTotal": ca_total}
     os.makedirs(os.path.dirname(WIKI_CACHE) or ".", exist_ok=True)
     with open(WIKI_CACHE, "w", encoding="utf-8") as f:
         json.dump(cache, f)

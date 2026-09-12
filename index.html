@@ -154,6 +154,7 @@
   .m1 { color: var(--mid); background: var(--mid-bg); }
   .m0 { color: var(--no); background: var(--no-bg); }
   .mx { color: var(--unk); background: var(--unk-bg); }
+  .mark.soft { font-weight: 400; }
 
   .item { display: inline; }
   .item.untradeable { color: var(--muted); }
@@ -288,6 +289,7 @@
     <span><span class="mark m1">◐</span> in progress</span>
     <span><span class="mark m0">✗</span> not started</span>
     <span><span class="mark m0">3</span> not started, 3 skills short (hover for which)</span>
+    <span><span class="mark m0 soft">3*</span> short only on skills for items you could buy or find</span>
     <span><span class="mark mx">–</span> no data</span>
   </span>
   <span class="legend only-items">
@@ -471,8 +473,20 @@ function reqGroups(quest, p) {
   return [...groups.values()];
 }
 const missingReqs = (quest, p) => { const g = reqGroups(quest, p); return g && g.filter(x => !x.met); };
-const groupHtml = g => g.reqs.map(r =>
-  `${icon(r.skill === 'Quest' ? 'Quest point' : r.skill, '')}${esc(reqLabel(r))} <span class="dim">(has ${r.has ?? '?'})</span>`).join(' or ');
+// the levels the wiki lists under a quest's items: what making or gathering them yourself
+// takes. Never blocking - the item can also be bought, found, or had as a drop - so these
+// are kept out of reqGroups and shown apart. null = no item skills, or no data.
+function itemSkillsFor(quest, p) {
+  if (!quest.itemSkills.length || !state.players[p].skills) return null;
+  return quest.itemSkills.map(r => {
+    const has = levelFor(p, r.skill);
+    return { ...r, has, met: has != null && has >= r.level };
+  });
+}
+const reqHtml = r =>
+  `${icon(r.skill === 'Quest' ? 'Quest point' : r.skill, '')}${esc(reqLabel(r))} <span class="dim">(has ${r.has ?? '?'})</span>`;
+const groupHtml = g => g.reqs.map(reqHtml).join(' or ');
+const tipLine = (met, html) => `<br>${met ? '<span class="ok">✓</span>' : '<span class="no">✗</span>'} ${html}`;
 const reqLabel = r => (r.skill === 'Quest' ? 'Quest points' : r.skill.replace('+', ' + ')) + ' ' + r.level + (r.boostable ? ' (boostable)' : '');
 
 // storage advice for an item
@@ -602,21 +616,29 @@ function renderQuests() {
       let [cls, sym, title] = MARK[st];
       let tip = `<b>${title}</b>`;
       const groups = st === 2 ? null : reqGroups(qst, p);
+      const missing = groups ? groups.filter(g => !g.met) : [];
       if (groups) {
-        const missing = groups.filter(g => !g.met);
         if (missing.length) sym = String(missing.length);
         tip += missing.length ? ` · ${missing.length} skill${missing.length > 1 ? 's' : ''} short` : ' · has the skill levels';
-        tip += groups.map(g => `<br>${g.met ? '<span class="ok">✓</span>' : '<span class="no">✗</span>'} ${groupHtml(g)}`).join('');
+        tip += groups.map(g => tipLine(g.met, groupHtml(g))).join('');
+      } else if (st !== 2 && state.players[p].skills) tip += ' · no skill requirements';
+      const made = st === 2 ? null : itemSkillsFor(qst, p);
+      if (made) {
+        const short = made.filter(r => !r.met);
+        // these never block the quest, so they only take the mark when nothing else is short
+        if (short.length && !missing.length) { sym = short.length + '*'; cls += ' soft'; }
+        tip += `<br><span class="dim">to make the items instead of buying or finding them:</span>`
+          + made.map(r => tipLine(r.met, reqHtml(r))).join('');
       }
       return `<td class="st"><span class="mark ${cls}"${tipAttr(tip)}>${sym}</span></td>`;
     }).join('');
     const open = state.expanded.has(qst.page);
     const rowCls = ['q', i % 2 ? 'alt' : '', qst.type === 'miniquest' ? 'mini' : '', done === PLAYERS.length ? 'all-done' : '',
-      qst.items.length || qst.reqs.length ? 'has-items' : '', open ? 'open' : ''].filter(Boolean).join(' ');
+      qst.items.length || qst.reqs.length || qst.itemSkills.length ? 'has-items' : '', open ? 'open' : ''].filter(Boolean).join(' ');
     const nameCell = questLink(qst);
     const items = [...qst.items].sort((a, b) => (a.acquired - b.acquired) || a.item.name.localeCompare(b.item.name));
     return `<tr class="${rowCls}" data-q="${esc(qst.page)}">
-      <td><span class="tw">${qst.items.length || qst.reqs.length ? (open ? '▾' : '▸') : ''}</span>${nameCell}${qst.type === 'miniquest' ? ' <small>(miniquest)</small>' : ''}</td>
+      <td><span class="tw">${qst.items.length || qst.reqs.length || qst.itemSkills.length ? (open ? '▾' : '▸') : ''}</span>${nameCell}${qst.type === 'miniquest' ? ' <small>(miniquest)</small>' : ''}</td>
       <td>${esc(qst.difficulty)}</td>
       <td>${esc(qst.length)}</td>
       <td class="num">${qst.type === 'quest' ? qst.qp : ''}</td>
@@ -627,6 +649,7 @@ function renderQuests() {
     </tr>` + (open ? `<tr class="detail${i % 2 ? ' alt' : ''}"><td colspan="${QUEST_COLUMNS.length}"><div class="dcols">
       <div class="dcol"><div class="dhead">Requires</div>${
         qst.reqs.length ? `<div class="reqs"><span class="lbl">Skills</span>${qst.reqs.map(r => `<span class="reqline">${icon(r.skill === 'Quest' ? 'Quest point' : r.skill, '')}${esc(reqLabel(r))}${'or' in r ? ' <small>(either)</small>' : ''}</span>`).join('')}</div>` : ''
+      }${qst.itemSkills.length ? `<div class="reqs"><span class="lbl"${tipAttr('To make or gather the quest items yourself - each can also be bought, found, or had as a drop, so these never block the quest')}>Item skills</span>${qst.itemSkills.map(r => `<span class="reqline">${icon(r.skill, '')}${esc(reqLabel(r))}</span>`).join('')}</div>` : ''
       }${qst.prereqs.length ? `<div class="reqs"><span class="lbl">Quests</span>${qst.prereqs.map(p => `<span class="reqline">${questLink(p)}</span>`).join('')}</div>` : ''
       }<div class="reqs"><span class="lbl">Items</span>${items.map(renderItemInline).join('') || '<span class="item untradeable">none</span>'}</div></div>
       <div class="dcol"><div class="dhead">Rewards <span class="imp ${qst.impact.tier}"${tipAttr(impactTip(qst))}>${qst.impact.score}</span></div>${renderRewards(qst)}</div>
@@ -1363,6 +1386,8 @@ function init() {
     q.unlocks = (i.requiredFor || []).map(t => byPage.get(norm(t))).filter(Boolean);
     q.xp = i.xp || [];
     q.rewards = i.rewards || [];
+    // an item skill a hard requirement already covers is not worth repeating
+    q.itemSkills = (i.itemSkills || []).filter(s => !q.reqs.some(r => r.skill === s.skill && r.level >= s.level));
   }
   // the two sources of the prerequisite graph (each page's requirements, and each page's
   // "required for completing" list) are merged so both directions agree
