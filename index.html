@@ -186,6 +186,15 @@
   tr.sec small { color: var(--muted); font-weight: 400; margin-left: 8px; }
   td.lv .v.zero { color: var(--unk); font-weight: 400; }
   tr.sum:hover td { background: rgba(255,246,206,.75); }
+  tr.sum[data-toggle] { cursor: pointer; }
+  tr.sum.sub td { background: rgba(150,115,50,.09); }
+  tr.sum.sub td:first-child { font-weight: 600; padding-left: 34px; }
+  td.tiers { text-align: right; white-space: nowrap; }
+  .tier { display: inline-block; min-width: 24px; margin-left: 4px; padding: 2px 3px; border-radius: 3px;
+    font-size: 11px; font-weight: 700; text-align: center; color: var(--muted);
+    background: linear-gradient(to right, var(--mid-bg) calc(var(--f, 0) * 100%), var(--unk-bg) 0); }
+  .tier.part { color: var(--mid); }
+  .tier.done { background: var(--ok-bg); color: var(--ok); }
   td.lv .frac { color: var(--muted); font-weight: 400; }
 </style>
 </head>
@@ -259,6 +268,7 @@ const state = {
   skills: [],        // ordered skill names present in the data
   sort: { quests: { key: 'done', dir: -1 }, items: { key: 'status', dir: 1 }, stats: { key: 'skill', dir: 1 } },
   expanded: new Set(),  // quest pages whose item list is open
+  open: {},             // expandable summary rows on the stats tab, by key
   filter: { q: '', hideDone: true, showMini: true, tradeableOnly: true, hideRetired: false },
 };
 
@@ -631,7 +641,7 @@ function summaryRows() {
     let done = 0, total = 0;
     for (const region of Object.values(d)) for (const tier of Object.values(region)) { total++; if (tier.complete) done++; }
     return frac(done, total);
-  }, { note: 'complete tiers across all 12 regions' });
+  }, { note: 'complete tiers across all 12 regions - click for each region', toggle: 'diaries', expand: diaryRows });
   add('Combat achievements', p => {
     const c = (state.players[p].raw || {}).combat_achievements;
     if (!Array.isArray(c)) return null;
@@ -644,6 +654,25 @@ function summaryRows() {
     return frac(vals.filter(Boolean).length, vals.length);
   });
   return rows;
+}
+
+// one row per diary region: each player's four tiers as chips that fill with task progress
+const TIERS = ['Easy', 'Medium', 'Hard', 'Elite'];
+function diaryRows() {
+  const regions = [];
+  for (const p of PLAYERS) for (const r of Object.keys((state.players[p].raw || {}).achievement_diaries || {})) if (!regions.includes(r)) regions.push(r);
+  return regions.map(region => `<tr class="sum sub"><td><a href="${esc(wikiUrl(region + ' Diary'))}" target="_blank" rel="noopener">${esc(region)}</a></td>`
+    + PLAYERS.map(p => {
+      const d = ((state.players[p].raw || {}).achievement_diaries || {})[region];
+      if (!d) return '<td class="tiers"><span class="v none">–</span></td>';
+      return '<td class="tiers">' + TIERS.map(t => {
+        const tier = d[t];
+        if (!tier) return '';
+        const done = tier.tasks.filter(Boolean).length, total = tier.tasks.length;
+        const cls = tier.complete ? 'done' : done ? 'part' : 'none';
+        return `<span class="tier ${cls}" style="--f:${total ? done / total : 0}"${tipAttr(`<b>${t}</b> ${done}/${total} tasks${tier.complete ? ' · complete' : ''}`)}>${t === 'Elite' ? 'El' : t[0]}</span>`;
+      }).join('') + '</td>';
+    }).join('') + '</tr>').join('');
 }
 
 const STATS_COLUMNS = [
@@ -726,10 +755,12 @@ function renderStats() {
     const low = vals.length ? Math.min(...vals) : null;
     const lead = vals.length > 1 && low !== high;
     // bars only where there is a real ceiling (total XP has none, so it gets no bar)
-    return `<tr class="sum${i === sums.length - 1 ? ' last' : ''}"><td${tipAttr(row.note ? esc(row.note) : '')}>`
+    const open = row.toggle && state.open[row.toggle];
+    return `<tr class="sum${i === sums.length - 1 ? ' last' : ''}"${row.toggle ? ` data-toggle="${row.toggle}"` : ''}><td${tipAttr(row.note ? esc(row.note) : '')}>`
+      + (row.toggle ? `<span class="tw">${open ? '▾' : '▸'}</span>` : '')
       + (row.ico ? icon(row.ico, '') : '') + `${esc(row.label)}</td>`
       + row.cells.map(c => c ? cell({ ...c, best: lead && c.v === high }) : blank).join('')
-      + '</tr>';
+      + '</tr>' + (open ? row.expand() : '');
   }).join('');
 
   const body = statsSections().map(([title, all, hideEmpty]) => {
@@ -788,6 +819,12 @@ document.getElementById('table').addEventListener('click', e => {
   if (row && !e.target.closest('a')) {
     const k = row.dataset.q;
     state.expanded.has(k) ? state.expanded.delete(k) : state.expanded.add(k);
+    render();
+    return;
+  }
+  const sumRow = e.target.closest('tr.sum[data-toggle]');
+  if (sumRow && !e.target.closest('a')) {
+    state.open[sumRow.dataset.toggle] = !state.open[sumRow.dataset.toggle];
     render();
     return;
   }
