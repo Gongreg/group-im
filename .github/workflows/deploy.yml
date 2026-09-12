@@ -2,7 +2,7 @@ name: Fetch data and deploy
  
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "*/10 * * * *"   # player data every 10 minutes; wiki data is cached for a day
   workflow_dispatch:        # manual "Run workflow" button
   push:
     branches: [main]
@@ -19,6 +19,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.fetch.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -31,17 +33,27 @@ jobs:
           git clone --quiet --depth 1 --branch data "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" state \
             || { mkdir state && git -C state init --quiet -b data && git -C state remote add origin "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"; }
       - name: Fetch quest list and player data
-        run: python3 fetch_data.py
+        id: fetch
         env:
           HISTORY: state/collection_log.json
-      - name: Save the history back to the data branch
+          WIKI_CACHE: state/wiki_cache.json
+        run: |
+          python3 fetch_data.py
+          # deploy when the data changed, or always for a push or a manual run (the code may have changed)
+          if [ "${{ github.event_name }}" != "schedule" ] || [ "$(cat state/last_deploy.txt 2>/dev/null)" != "$(cat data.hash)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"; cp data.hash state/last_deploy.txt; echo "deploying"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"; echo "nothing changed since the last deploy - skipping"
+          fi
+      - name: Save the build state back to the data branch
         run: |
           cd state
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --cached --quiet && echo "history unchanged" || { git commit --quiet -m "Collection log history $(date -u +%Y-%m-%dT%H:%MZ)" && git push --quiet origin data; }
+          git diff --cached --quiet && echo "history unchanged" || { git commit --quiet -m "Build state $(date -u +%Y-%m-%dT%H:%MZ)" && git push --quiet origin data; }
       - name: Assemble site
+        if: steps.fetch.outputs.changed == 'true'
         run: |
           mkdir -p public
           cp index.html data.js public/
@@ -50,12 +62,15 @@ jobs:
           sed -i "s|src=\"data.js\"|src=\"data.js?v=${GITHUB_RUN_ID}\"|" public/index.html
           grep -o 'data.js?v=[0-9]*' public/index.html
       - uses: actions/configure-pages@v5
+        if: steps.fetch.outputs.changed == 'true'
       - uses: actions/upload-pages-artifact@v3
+        if: steps.fetch.outputs.changed == 'true'
         with:
           path: public
  
   deploy:
     needs: build
+    if: needs.build.outputs.changed == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

@@ -11,10 +11,16 @@
   - Collection log history: WikiSync lists the log in a fixed order, so when each item
     was gained is recorded here by diffing against the previous run (HISTORY file)
 
-Usage: python3 fetch_data.py
+Usage: python3 fetch_data.py [--refresh]
+
+Wiki reference data (quest list, items, requirements, rewards, CA count) changes
+rarely and is cached for a day (WIKI_CACHE file); --refresh forces a new fetch.
+Player data is fetched every run. data.hash is written alongside data.js so the
+deploy can be skipped when nothing has changed.
 Only stdlib is used.
 """
 import base64
+import hashlib
 import json
 import os
 import re
@@ -33,6 +39,8 @@ SYNC_URL = "https://sync.runescape.wiki/runelite/player/{name}/STANDARD"
 HISCORES_URL = "https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player={name}"
 USER_AGENT = "osrs-quest-tracker/1.1 (personal tool for a friend group)"
 HISTORY = os.environ.get("HISTORY", "history/collection_log.json")
+WIKI_CACHE = os.environ.get("WIKI_CACHE", "history/wiki_cache.json")
+WIKI_CACHE_TTL = 24 * 3600
 WIKI_IMAGES = "https://oldschool.runescape.wiki/images/"
 
 
@@ -212,6 +220,7 @@ def fetch_players():
         url = SYNC_URL.format(name=urllib.parse.quote(name))
         try:
             data = get_json(url)
+            data.pop("timestamp", None)  # the response time, not a sync time; it would defeat the change check
             done = sum(1 for v in data.get("quests", {}).values() if v == 2)
             print(f"  {name}: {done} quests completed")
             players[name] = data
@@ -499,7 +508,19 @@ def fetch_ca_total():
     return len([r for r in table[1:] if len(r) >= 3]) or None
 
 
-def main() -> int:
+def wiki_data(refresh: bool = False):
+    """Everything that comes from the wiki, cached for a day."""
+    if not refresh:
+        try:
+            with open(WIKI_CACHE, encoding="utf-8") as f:
+                cache = json.load(f)
+            age = time.time() - cache.get("at", 0)
+            if age < WIKI_CACHE_TTL:
+                print(f"Using wiki data cached {age / 3600:.1f} h ago")
+                return cache
+        except (OSError, ValueError):
+            pass
+
     print("Fetching quest list...")
     list_html = page_html("Quests/List")
 
@@ -513,6 +534,16 @@ def main() -> int:
     ca_total = fetch_ca_total()
     print(f"  {ca_total} tasks")
 
+    cache = {"at": time.time(), "listHtml": list_html, "items": items, "reqs": reqs, "questInfo": quest_info, "caTotal": ca_total}
+    os.makedirs(os.path.dirname(WIKI_CACHE) or ".", exist_ok=True)
+    with open(WIKI_CACHE, "w", encoding="utf-8") as f:
+        json.dump(cache, f)
+    return cache
+
+
+def main() -> int:
+    wiki = wiki_data(refresh="--refresh" in sys.argv)
+
     print("Fetching player quests...")
     players = fetch_players()
 
@@ -523,20 +554,24 @@ def main() -> int:
     clog = update_clog_history(players)
 
     payload = {
-        "fetchedAt": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        "listHtml": list_html,
-        "items": items,
+        "listHtml": wiki["listHtml"],
+        "items": wiki["items"],
         "players": players,
         "stats": stats,
-        "caTotal": ca_total,
-        "reqs": reqs,
-        "questInfo": quest_info,
+        "caTotal": wiki["caTotal"],
+        "reqs": wiki["reqs"],
+        "questInfo": wiki["questInfo"],
         "clog": clog,
     }
+    # everything but the timestamp: the deploy is skipped when this has not changed
+    digest = hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+    with open("data.hash", "w") as f:
+        f.write(digest)
+    payload["fetchedAt"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     js = "window.QUEST_DATA = " + json.dumps(payload).replace("</", "<\\/") + ";\n"
     with open("data.js", "w", encoding="utf-8") as f:
         f.write(js)
-    print(f"Wrote data.js ({len(js) // 1024} KB)")
+    print(f"Wrote data.js ({len(js) // 1024} KB), hash {digest[:12]}")
     return 0
 
 
