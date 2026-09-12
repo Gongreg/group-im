@@ -123,6 +123,11 @@
   th .dir { color: var(--accent); margin-left: 4px; }
   body:not(.view-quests) tbody tr:nth-child(even) td, tr.alt td { background: rgba(96,68,22,.07); }
   tr.q.has-items { cursor: pointer; }
+  .dcols { display: flex; gap: 32px; align-items: flex-start; }
+  .dcol { flex: 1 1 0; min-width: 0; }
+  .dcol + .dcol { border-left: 1px solid var(--line); padding-left: 28px; }
+  .dhead { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; padding-bottom: 3px; border-bottom: 1px solid var(--line);
+    font-size: 12px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
   .reqs { margin-bottom: 4px; }
   .reqs .lbl { display: inline-block; min-width: 92px; color: var(--muted); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .3px; }
   .reqline { display: inline-block; margin-right: 14px; }
@@ -130,6 +135,7 @@
   .reqs.rw .lbl { vertical-align: top; }
   .rwline { display: inline-block; max-width: 900px; vertical-align: top; }
   .rwline + .rwline { display: block; margin-left: 92px; }
+  .rwline { max-width: 100%; }
   .rwline a { color: var(--accent); }
   tr.detail td { padding-top: 6px; }
   .tw { display: inline-block; width: 14px; color: var(--muted); font-size: 11px; }
@@ -156,6 +162,10 @@
   .item + .item::before { content: ", "; }
 
   .tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-weight: 700; }
+  .imp { display: inline-block; min-width: 30px; padding: 2px 6px; border-radius: 3px; font-weight: 700; font-size: 13px; text-align: center; }
+  .imp.hi { color: var(--ok); background: var(--ok-bg); }
+  .imp.mid { color: var(--mid); background: var(--mid-bg); }
+  .imp.lo { color: var(--unk); background: var(--unk-bg); }
   .keep { color: var(--ok); background: var(--ok-bg); }
   .retire { color: var(--no); background: var(--no-bg); }
   .skip { color: var(--mid); background: var(--mid-bg); }
@@ -499,6 +509,7 @@ const QUEST_COLUMNS = [
   { key: 'difficulty', label: 'Difficulty' },
   { key: 'length', label: 'Length' },
   { key: 'qp', label: 'QP', cls: 'num', ico: 'Quest point' },
+  { key: 'impact', label: 'Impact', cls: 'st', tip: 'How much a quest is worth doing: progression-chart milestones and item rewards count most, then XP, then how many quests it gates, then quest points. Hover a score for its breakdown.' },
   { key: 'done', label: 'Done by', cls: 'num' },
   ...PLAYERS.map((p, i) => ({ key: 'p' + i, label: p, cls: 'st' })),
   { key: 'items', label: 'Items', cls: 'num' },
@@ -510,6 +521,7 @@ function questSortValue(q, key) {
     case 'difficulty': return DIFFICULTY.indexOf(q.difficulty);
     case 'length': return LENGTH.indexOf(q.length);
     case 'qp': return q.qp;
+    case 'impact': return q.impact.score;
     case 'done': return doneCount(q);
     case 'items': return q.items.length;
     default: return questStatus(q, PLAYERS[+key.slice(1)]);
@@ -524,10 +536,34 @@ function renderItemInline(entry) {
   return `<span class="${cls}"${tipAttr(esc(title))}><a href="${esc(wikiUrl(item.page))}" target="_blank" rel="noopener">${esc(item.name)}</a>${qty ? `<span class="qty"> ×${qty.toLocaleString()}</span>` : ''}</span>`;
 }
 
+// progression-chart milestones a quest unlocks (mirrors the quest rules on the Progression tab)
+const MILESTONE_QUESTS = {
+  'Death Plateau': ['Climbing boots'], 'Underground Pass': ["Iban's staff"], 'Desert Treasure I': ['Ancient staff', 'Ice Barrage'],
+  'Monkey Madness I': ['Dragon scimitar'], 'Lost City': ['Dragon dagger'], 'The Fremennik Isles': ['Helm of neitiznot'],
+  'Recipe for Disaster': ['Barrows gloves'], 'A Kingdom Divided': ['Book of the dead'], 'Animal Magnetism': ["Ava's accumulator"],
+  'Dragon Slayer II': ["Ava's assembler", 'Wrath rune'], 'Dream Mentor': ['Spellbook Swap'], 'Roving Elves': ['Crystal halberd'],
+  'Haunted Mine': ['Salve amulet'], "King's Ransom": ['Piety'],
+};
+// how much a quest is worth doing: milestones and items first, then xp, then what it gates, then points
+function impact(q) {
+  const parts = [];
+  let score = 0;
+  const add = (label, v) => { score += v; parts.push(`${label} <span class="dim">+${v}</span>`); };
+  const ms = MILESTONE_QUESTS[q.name] || [];
+  if (ms.length) add('unlocks ' + esc(ms.join(', ')), Math.min(50, 25 * ms.length));
+  if (q.rewards.length) add(`${q.rewards.length} item${q.rewards.length > 1 ? 's' : ''}/unlock${q.rewards.length > 1 ? 's' : ''}`, Math.min(24, 6 * q.rewards.length));
+  const xp = q.xp.reduce((n, [, v]) => n + v, 0);
+  if (xp) add(`${xp.toLocaleString()} xp`, Math.min(30, Math.round(10 * Math.log10(xp / 1000 + 1))));
+  if (q.unlocks.length) add(`needed for ${q.unlocks.length} quest${q.unlocks.length > 1 ? 's' : ''}`, Math.min(25, 5 * q.unlocks.length));
+  if (q.qp) add(`${q.qp} quest point${q.qp > 1 ? 's' : ''}`, 2 * q.qp);
+  return { score, parts, tier: score >= 60 ? 'hi' : score >= 30 ? 'mid' : 'lo' };
+}
+const impactTip = q => `<b>Impact ${q.impact.score}</b><br>` + (q.impact.parts.join('<br>') || 'nothing recorded');
+
 // rewards, most useful first: items and unlocks, xp, what the quest is a prerequisite for, quest points
 function renderRewards(q) {
   const parts = [];
-  if (q.rewards.length) parts.push(`<div class="reqs rw"><span class="lbl">Rewards</span>${q.rewards.map(l => `<div class="rwline">${wikiLine(l)}</div>`).join('')}</div>`);
+  if (q.rewards.length) parts.push(`<div class="reqs rw"><span class="lbl">Items</span>${q.rewards.map(l => `<div class="rwline">${wikiLine(l)}</div>`).join('')}</div>`);
   if (q.xp.length) parts.push(`<div class="reqs"><span class="lbl">XP</span>${q.xp.map(([k, n]) => `<span class="reqline">${icon(k, '')}${esc(k)} <b>${n.toLocaleString()}</b></span>`).join('')}</div>`);
   if (q.unlocks.length) parts.push(`<div class="reqs"><span class="lbl">Needed for</span>${q.unlocks.map(u => `<span class="reqline">${questLink(u)}</span>`).join('')}</div>`);
   if (q.type === 'quest') parts.push(`<div class="reqs"><span class="lbl">Quest points</span><span class="reqline">${icon('Quest point', '')}<b>${q.qp}</b></span></div>`);
@@ -551,7 +587,7 @@ function renderQuests() {
   });
 
   const head = QUEST_COLUMNS.map(c =>
-    `<th class="${c.cls || ''}" data-key="${c.key}">${c.ico ? icon(c.ico, '') : ''}${esc(c.label)}${c.key === key ? `<span class="dir">${dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`).join('');
+    `<th class="${c.cls || ''}" data-key="${c.key}"${c.tip ? tipAttr(c.tip) : ''}>${c.ico ? icon(c.ico, '') : ''}${esc(c.label)}${c.key === key ? `<span class="dir">${dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`).join('');
 
   const rows = list.map((qst, i) => {
     const done = doneCount(qst);
@@ -578,13 +614,17 @@ function renderQuests() {
       <td>${esc(qst.difficulty)}</td>
       <td>${esc(qst.length)}</td>
       <td class="num">${qst.type === 'quest' ? qst.qp : ''}</td>
+      <td class="st"><span class="imp ${qst.impact.tier}"${tipAttr(impactTip(qst))}>${qst.impact.score}</span></td>
       <td class="num">${done}/${PLAYERS.length}</td>
       ${cells}
       <td class="num">${qst.items.length || '–'}</td>
-    </tr>` + (open ? `<tr class="detail${i % 2 ? ' alt' : ''}"><td colspan="${QUEST_COLUMNS.length}">${
+    </tr>` + (open ? `<tr class="detail${i % 2 ? ' alt' : ''}"><td colspan="${QUEST_COLUMNS.length}"><div class="dcols">
+      <div class="dcol"><div class="dhead">Requires</div>${
         qst.reqs.length ? `<div class="reqs"><span class="lbl">Skills</span>${qst.reqs.map(r => `<span class="reqline">${icon(r.skill === 'Quest' ? 'Quest point' : r.skill, '')}${esc(reqLabel(r))}${'or' in r ? ' <small>(either)</small>' : ''}</span>`).join('')}</div>` : ''
       }${qst.prereqs.length ? `<div class="reqs"><span class="lbl">Quests</span>${qst.prereqs.map(p => `<span class="reqline">${questLink(p)}</span>`).join('')}</div>` : ''
-      }<div class="reqs"><span class="lbl">Items</span>${items.map(renderItemInline).join('') || '<span class="item untradeable">none</span>'}</div>${renderRewards(qst)}</td></tr>` : '');
+      }<div class="reqs"><span class="lbl">Items</span>${items.map(renderItemInline).join('') || '<span class="item untradeable">none</span>'}</div></div>
+      <div class="dcol"><div class="dhead">Rewards <span class="imp ${qst.impact.tier}"${tipAttr(impactTip(qst))}>${qst.impact.score}</span></div>${renderRewards(qst)}</div>
+    </div></td></tr>` : '');
   }).join('');
 
   document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${rows}</tbody>`;
@@ -1286,6 +1326,7 @@ function init() {
   // "required for completing" list) are merged so both directions agree
   const link = (pre, q) => { if (!pre.unlocks.includes(q)) pre.unlocks.push(q); if (!q.prereqs.includes(pre)) q.prereqs.push(pre); };
   for (const q of state.quests) { for (const pre of q.prereqs.slice()) link(pre, q); for (const u of q.unlocks.slice()) link(q, u); }
+  for (const q of state.quests) q.impact = impact(q);
   // the status line only speaks up when something is wrong
   const unlinked = state.items.flatMap(it => it.needed).filter(n => !n.quest).length;
   if (unlinked) setStatus(`${unlinked} item→quest links could not be matched.`, true);
