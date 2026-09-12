@@ -1019,10 +1019,10 @@ function init() {
   state.skills = collectSkills();
   const reqs = new Map(Object.entries(data.reqs || {}).map(([k, v]) => [norm(k), v]));
   for (const q of state.quests) q.reqs = reqs.get(norm(q.page)) || [];
-  const nq = state.quests.filter(q => q.type === 'quest').length;
+  // the status line only speaks up when something is wrong
   const unlinked = state.items.flatMap(it => it.needed).filter(n => !n.quest).length;
-  setStatus(`${nq} quests, ${state.quests.length - nq} miniquests, ${state.items.length} items. Data fetched ${new Date(data.fetchedAt).toLocaleString()}.`
-    + (unlinked ? ` ${unlinked} item→quest links could not be matched.` : ''));
+  if (unlinked) setStatus(`${unlinked} item→quest links could not be matched.`, true);
+  else document.getElementById('status').hidden = true;
   try { setView(localStorage.getItem('view') || state.view); } catch (e) { /* storage blocked */ }
   renderPlayers();
   render();
