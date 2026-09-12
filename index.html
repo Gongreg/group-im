@@ -208,6 +208,8 @@
   td.tr .step { padding: 1px 0; }
   td.tr .up { color: var(--ok); font-weight: 700; }
   td.tr .q { color: var(--muted); font-weight: 400; }
+  td.tr .q a { color: inherit; }
+  td.tr .q a:hover { color: var(--accent); text-decoration: underline; }
   tr.sum td { background: var(--sum-bg); }
   tr.sum td:first-child { font-weight: 700; }
   tr.sum.last td { border-bottom: 2px solid rgba(70,48,14,.7); }
@@ -310,6 +312,7 @@ const icon = (name, alt) =>
   `<img class="icon" src="assets/icons/${esc(slug(name))}.png" alt="${esc(alt == null ? name : alt)}" onerror="this.remove()">`;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const wikiUrl = title => `${WIKI_BASE}/w/${encodeURIComponent(title.replace(/ /g, '_'))}`;
+const questLink = q => q.url ? `<a href="${esc(q.url)}" target="_blank" rel="noopener">${esc(q.name)}</a>` : esc(q.name);
 const tipAttr = html => html ? ` data-tip="${esc(html)}"` : '';  // html tooltip, see the tooltip section
 
 // ---------- parsing ----------
@@ -538,7 +541,7 @@ function renderQuests() {
     const open = state.expanded.has(qst.page);
     const rowCls = ['q', i % 2 ? 'alt' : '', qst.type === 'miniquest' ? 'mini' : '', done === PLAYERS.length ? 'all-done' : '',
       qst.items.length || qst.reqs.length ? 'has-items' : '', open ? 'open' : ''].filter(Boolean).join(' ');
-    const nameCell = qst.url ? `<a href="${esc(qst.url)}" target="_blank" rel="noopener">${esc(qst.name)}</a>` : esc(qst.name);
+    const nameCell = questLink(qst);
     const items = [...qst.items].sort((a, b) => (a.acquired - b.acquired) || a.item.name.localeCompare(b.item.name));
     return `<tr class="${rowCls}" data-q="${esc(qst.page)}">
       <td><span class="tw">${qst.items.length || qst.reqs.length ? (open ? '▾' : '▸') : ''}</span>${nameCell}${qst.type === 'miniquest' ? ' <small>(miniquest)</small>' : ''}</td>
@@ -726,7 +729,7 @@ function stepsFor(list) {
   const steps = [];
   for (const e of list.slice().sort((a, b) => a.level - b.level || a.quest.name.localeCompare(b.quest.name))) {
     const last = steps[steps.length - 1];
-    if (last && last.level === e.level) last.quests.push(e.quest.name); else steps.push({ level: e.level, quests: [e.quest.name] });
+    if (last && last.level === e.level) last.quests.push(e.quest); else steps.push({ level: e.level, quests: [e.quest] });
   }
   return steps;
 }
@@ -756,7 +759,7 @@ function renderTraining() {
       if (!list.length) return '<td class="tr"><span class="v none">–</span></td>';
       const has = levelFor(p, k);
       return '<td class="tr">' + stepsFor(list).map(st =>
-        `<div class="step"><span class="up">+${st.level - has}</span> → <b>${st.level}</b> <span class="q">${st.quests.map(esc).join(', ')}</span></div>`).join('') + '</td>';
+        `<div class="step"><span class="up">+${st.level - has}</span> → <b>${st.level}</b> <span class="q">${st.quests.map(questLink).join(', ')}</span></div>`).join('') + '</td>';
     }).join('') + '</tr>').join('');
   document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${summary}${rows}</tbody>`;
 }
