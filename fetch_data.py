@@ -420,13 +420,25 @@ def fetch_bytes(url: str):
 
 
 def lookup_item(item_id: int):
-    """Item name and icon (data URI) from the wiki, by id."""
+    """Item name and icon (data URI) from the wiki, by id.
+
+    The icon file is read from the item page's infobox rather than guessed from the
+    name: variants and stackables are named "Cow slippers (1).png", "Purple sweets 1.png".
+    """
     _, final = fetch_bytes(f"https://oldschool.runescape.wiki/w/Special:Lookup?type=item&id={item_id}")
     name = urllib.parse.unquote(final.split("/w/")[-1].split("#")[0].split("?")[0]).replace("_", " ")
+    candidates = []
+    try:
+        page = api(action="query", prop="revisions", rvprop="content", rvslots="main", titles=name)
+        wikitext = page["query"]["pages"][0]["revisions"][0]["slots"]["main"]["content"]
+        candidates = re.findall(r"\|\s*image\d*\s*=\s*\[\[File:([^\]|]+)", wikitext)
+    except Exception:  # noqa: BLE001
+        pass
+    candidates += [name + ".png", name + " 5.png", name + " 1.png"]
     icon = None
-    for suffix in ("", "_5", "_1"):  # stackables keep numbered icon files
+    for filename in candidates:
         try:
-            blob, _ = fetch_bytes(WIKI_IMAGES + urllib.parse.quote(name.replace(" ", "_")) + suffix + ".png")
+            blob, _ = fetch_bytes(WIKI_IMAGES + urllib.parse.quote(filename.strip().replace(" ", "_")))
             icon = "data:image/png;base64," + base64.b64encode(blob).decode()
             break
         except urllib.error.HTTPError:
@@ -456,7 +468,8 @@ def update_clog_history(players):
         first_time = not seen
         for i in ids:
             seen.setdefault(str(i), None if first_time else now)
-    unresolved = sorted({i for p in hist["players"].values() for i in p} - set(hist["items"]), key=int)
+    known = {i for i, v in hist["items"].items() if v.get("icon")}  # retry anything still without an icon
+    unresolved = sorted({i for p in hist["players"].values() for i in p} - known, key=int)
     for i in unresolved:
         try:
             item_name, icon = lookup_item(int(i))
