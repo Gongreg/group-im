@@ -27,11 +27,12 @@
   html { background: #000; }
   body { margin: 0; color: var(--ink);
     font: 14px/1.45 Arial, Helvetica, sans-serif;
+    /* the site's own rule: the stone column at native size, black either side */
     background: #000 url(assets/bg2.jpg) repeat-y top center;
-    background-size: 100% auto;
   }
-  /* everything sitting on the stone reads white, the way the real site does */
-  header, .tabs, .controls, #status { color: var(--white); }
+  /* everything sitting on the stone reads white, the way the real site does, and the
+     top chrome keeps inside the 910px stone column between the vine pillars */
+  header, .tabs, .controls, #status { color: var(--white); max-width: 860px; margin-left: auto; margin-right: auto; }
 
   /* ---- riveted stone plate: the button art from the hiscores, 9-sliced so it scales ---- */
   .chip, button {
