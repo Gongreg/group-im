@@ -53,7 +53,7 @@
     margin: 0; font-weight: 700; color: #ffd964; text-shadow: 2px 2px 0 #000; }
   .players { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px; }
-  .chip .count { color: var(--green); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chip .count { color: var(--green); font-weight: 700; }
   .chip.error { color: #ff9f8c; }
 
   .tabs { display: flex; gap: 6px; padding: 4px 0 0; }
@@ -224,6 +224,14 @@
 <script>
 // ---------- config ----------
 const PLAYERS = ['gaudyk', 'uncle sacks', 'Moms klit', 'knysliukas', 'cluescrollas'];
+// a word or two of flair on each player's chip; the story sits in the tooltip
+const FLAIR = {
+  'gaudyk': ['Beaver dad', 'Got a beaver pet at level 40'],
+  'uncle sacks': ['Baguette lord', 'Owns a stale baguette, one of the rarest collection log items'],
+  'Moms klit': ['Certified beef', 'Has the beef pet'],
+  'knysliukas': ['Admiral', 'The only one with Sailing'],
+  'cluescrollas': ['Just vibes', 'Nothing yet'],
+};
 const WIKI_BASE = 'https://oldschool.runescape.wiki';
 const DIFFICULTY = ['Novice', 'Intermediate', 'Experienced', 'Master', 'Grandmaster', 'Special'];
 const LENGTH = ['Very Short', 'Short', 'Medium', 'Long', 'Very Long'];
@@ -380,16 +388,11 @@ function itemStatus(item) {
 
 // ---------- rendering ----------
 function renderPlayers() {
-  const total = state.quests.filter(q => q.type === 'quest').length;
   document.getElementById('players').innerHTML = PLAYERS.map(name => {
     const p = state.players[name] || {};
-    let cls = 'chip', extra = '';
-    if (p.status === 'error') { cls += ' error'; extra = 'no data'; }
-    else if (p.status === 'ok') {
-      const done = state.quests.filter(q => q.type === 'quest' && questStatus(q, name) === 2).length;
-      extra = `${done}/${total}`;
-    }
-    return `<span class="${cls}" title="${esc(p.error || '')}"><b>${esc(name)}</b><span class="count">${esc(extra)}</span></span>`;
+    const [flair, story] = FLAIR[name] || ['', ''];
+    const cls = 'chip' + (p.status === 'error' ? ' error' : '');
+    return `<span class="${cls}" title="${esc([story, p.error].filter(Boolean).join(' · '))}"><b>${esc(name)}</b><span class="count">${esc(flair)}</span></span>`;
   }).join('');
 }
 
