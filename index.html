@@ -14,7 +14,6 @@
   @font-face { font-family: 'RuneScape'; src: url(assets/runescape_bold.ttf) format('truetype'); font-weight: 700; }
   :root {
     --ink: #171004; --muted: #6a5324; --line: rgba(88,62,22,.30);
-    --band: #d5bf8d;
     --white: #fff; --dim: #cfc7b4; --green: #97cf46;
     --ok: #1c6a12;   --ok-bg: rgba(60,140,40,.26);
     --mid: #8a5400;  --mid-bg: rgba(200,140,20,.30);
@@ -79,15 +78,17 @@
   /* ---- the scroll the tables sit on ---- */
   /* The scroll is the OSRS site's own: backdrop_745.gif for the paper and the
      765px rolls, which overhang it by 10px a side. Cut into caps + a repeating
-     middle so it holds its shape at any table width (see assets/). */
+     middle so it holds its shape at any table width (see assets/). The torn side
+     strips live on the outer box with nothing painted beneath them, so the stone
+     shows through the tears; the paper tile sits on the inner box only. */
   .scroll {
-    position: relative; margin: 0 34px 58px; padding: 48px 30px 48px;
-    background-color: #d8c58f;
-    background-image:
-      linear-gradient(rgba(255,249,228,.28), rgba(255,249,228,.28)),
-      url(assets/paper_l.png), url(assets/paper_r.png), url(assets/paper_m.jpg);
-    background-repeat: no-repeat, repeat-y, repeat-y, repeat;
-    background-position: center, left top, right top, center top;
+    position: relative; margin: 0 34px 58px; padding: 0 40px;
+    /* torn strips over the side padding; the paper tile clipped to the middle band so it
+       runs the full height, under the rolls, but never behind the tears */
+    background-image: url(assets/paper_l.png), url(assets/paper_r.png), url(assets/paper_m.jpg);
+    background-repeat: repeat-y, repeat-y, repeat;
+    background-position: left top, right top, left top;
+    background-clip: border-box, border-box, content-box;
     filter: drop-shadow(0 6px 14px rgba(0,0,0,.6));
   }
   .scroll::before, .scroll::after {
@@ -99,12 +100,12 @@
   .scroll::before { top: -11px; }
   .scroll::after { bottom: -11px;
     background-image: url(assets/roll_bot_l.png), url(assets/roll_bot_r.png), url(assets/roll_bot_m.png); }
-  .wrap { overflow-x: auto; }
+  .wrap { overflow-x: auto; padding: 47px 0 50px; }
   table { border-collapse: collapse; width: 100%; background: transparent; }
   th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: top; }
   td { font-weight: 600; }
   th { position: sticky; top: 0; z-index: 1; cursor: pointer; user-select: none; font-weight: 700;
-    color: var(--ink); background: var(--band); letter-spacing: .2px;
+    color: var(--ink); background: rgba(110,80,30,.16); letter-spacing: .2px;
     border-bottom: 2px solid rgba(70,48,14,.7); box-shadow: inset 0 1px 0 rgba(255,252,238,.5); }
   th:hover { color: var(--accent); }
   th .dir { color: var(--accent); margin-left: 4px; }
@@ -162,7 +163,7 @@
   tr.sum td { background: var(--sum-bg); }
   tr.sum td:first-child { font-weight: 700; }
   tr.sum.last td { border-bottom: 2px solid rgba(70,48,14,.7); }
-  tr.sec td { background: var(--band); font-weight: 700; padding: 9px 10px 5px; border-bottom: 2px solid rgba(70,48,14,.7); }
+  tr.sec td { background: rgba(110,80,30,.16); font-weight: 700; padding: 9px 10px 5px; border-bottom: 2px solid rgba(70,48,14,.7); }
   tr.sec small { color: var(--muted); font-weight: 400; margin-left: 8px; }
   td.lv .v.zero { color: var(--unk); font-weight: 400; }
   tr.sum:hover td { background: rgba(255,246,206,.75); }
