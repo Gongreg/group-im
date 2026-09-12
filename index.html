@@ -109,6 +109,13 @@
   th .dir { color: var(--accent); margin-left: 4px; }
   body:not(.view-quests) tbody tr:nth-child(even) td, tr.alt td { background: rgba(96,68,22,.07); }
   tr.q.has-items { cursor: pointer; }
+  .req { display: inline-block; min-width: 18px; margin-left: 4px; padding: 2px 4px; border-radius: 3px;
+    font-size: 11px; font-weight: 700; line-height: 1.2; vertical-align: 1px; text-align: center; }
+  .req.ok { color: var(--ok); background: var(--ok-bg); }
+  .req.miss { color: var(--no); background: var(--no-bg); }
+  .reqs { margin-bottom: 4px; }
+  .reqline { display: inline-block; margin-right: 14px; }
+  .reqline small { color: var(--muted); }
   .tw { display: inline-block; width: 14px; color: var(--muted); font-size: 11px; }
   tr.open td { border-bottom: none; }
   tr.detail td { white-space: normal; padding: 0 10px 10px 34px; }
@@ -187,6 +194,7 @@
     <span><span class="mark m1">◐</span> in progress</span>
     <span><span class="mark m0">✗</span> not started</span>
     <span><span class="mark mx">–</span> no data</span>
+    <span><span class="req ok">✓</span> has the skill levels · <span class="req miss">2</span> skills short</span>
     <span><i>italic item</i> = obtained during the quest</span>
   </span>
   <span class="legend only-items">
@@ -315,6 +323,40 @@ function doneCount(quest) {
 }
 function questPending(quest) { return doneCount(quest) < PLAYERS.length; }
 
+function questPoints(p) {
+  return state.quests.reduce((n, q) => n + (q.type === 'quest' && questStatus(q, p) === 2 ? q.qp : 0), 0);
+}
+// the player's level for a requirement; "Quest" means quest points, "Combat" combat level
+function levelFor(p, skill) {
+  const r = state.players[p];
+  if (!r.skills) return null;
+  if (skill === 'Quest') return r.status === 'ok' ? questPoints(p) : null;
+  if (skill.includes('+')) {  // e.g. Attack+Strength for the Warriors' Guild
+    const parts = skill.split('+').map(k => levelFor(p, k));
+    return parts.some(v => v == null) ? null : parts.reduce((a, b) => a + b, 0);
+  }
+  if (skill === 'Combat') return combatLevel(r.skills);
+  const s = r.skills[skill];
+  return s ? s.level : null;
+}
+// a quest's requirements for one player, grouped: an "or" line is one group
+// that counts as met if any option is. null = can't tell (no skill data).
+function reqGroups(quest, p) {
+  if (!quest.reqs.length || !state.players[p].skills) return null;
+  const groups = new Map();
+  for (const r of quest.reqs) {
+    const key = 'or' in r ? 'or' + r.or : r.skill + r.level;
+    const has = levelFor(p, r.skill);
+    const g = groups.get(key) || { reqs: [], met: false };
+    g.reqs.push({ ...r, has }); g.met = g.met || (has != null && has >= r.level);
+    groups.set(key, g);
+  }
+  return [...groups.values()];
+}
+const missingReqs = (quest, p) => { const g = reqGroups(quest, p); return g && g.filter(x => !x.met); };
+const groupLabel = g => g.reqs.map(r => `${reqLabel(r)} (has ${r.has ?? '?'})`).join(' or ');
+const reqLabel = r => (r.skill === 'Quest' ? 'Quest points' : r.skill.replace('+', ' + ')) + ' ' + r.level + (r.boostable ? ' (boostable)' : '');
+
 // storage advice for an item
 function itemStatus(item) {
   const uses = item.needed.filter(n => n.quest);
@@ -397,23 +439,35 @@ function renderQuests() {
   const rows = list.map((qst, i) => {
     const done = doneCount(qst);
     const cells = PLAYERS.map(p => {
-      const [cls, sym, title] = MARK[questStatus(qst, p)];
-      return `<td class="st"><span class="mark ${cls}" title="${title}">${sym}</span></td>`;
+      const st = questStatus(qst, p);
+      const [cls, sym, title] = MARK[st];
+      let badge = '';
+      const groups = st === 2 ? null : reqGroups(qst, p);
+      if (groups) {
+        const missing = groups.filter(g => !g.met);
+        const tip = groups.map(g => (g.met ? '✓ ' : '✗ ') + groupLabel(g)).join('\n');
+        badge = missing.length
+          ? `<span class="req miss" title="${esc(missing.length + ' short\n' + tip)}">${missing.length}</span>`
+          : `<span class="req ok" title="${esc('Has the levels\n' + tip)}">✓</span>`;
+      }
+      return `<td class="st"><span class="mark ${cls}" title="${title}">${sym}</span>${badge}</td>`;
     }).join('');
     const open = state.expanded.has(qst.page);
     const rowCls = ['q', i % 2 ? 'alt' : '', qst.type === 'miniquest' ? 'mini' : '', done === PLAYERS.length ? 'all-done' : '',
-      qst.items.length ? 'has-items' : '', open ? 'open' : ''].filter(Boolean).join(' ');
+      qst.items.length || qst.reqs.length ? 'has-items' : '', open ? 'open' : ''].filter(Boolean).join(' ');
     const nameCell = qst.url ? `<a href="${esc(qst.url)}" target="_blank" rel="noopener">${esc(qst.name)}</a>` : esc(qst.name);
     const items = [...qst.items].sort((a, b) => (a.acquired - b.acquired) || a.item.name.localeCompare(b.item.name));
     return `<tr class="${rowCls}" data-q="${esc(qst.page)}">
-      <td><span class="tw">${qst.items.length ? (open ? '▾' : '▸') : ''}</span>${nameCell}${qst.type === 'miniquest' ? ' <small>(miniquest)</small>' : ''}</td>
+      <td><span class="tw">${qst.items.length || qst.reqs.length ? (open ? '▾' : '▸') : ''}</span>${nameCell}${qst.type === 'miniquest' ? ' <small>(miniquest)</small>' : ''}</td>
       <td>${esc(qst.difficulty)}</td>
       <td>${esc(qst.length)}</td>
       <td class="num">${qst.type === 'quest' ? qst.qp : ''}</td>
       <td class="num">${done}/${PLAYERS.length}</td>
       ${cells}
       <td class="num">${qst.items.length || '–'}</td>
-    </tr>` + (open ? `<tr class="detail${i % 2 ? ' alt' : ''}"><td colspan="${QUEST_COLUMNS.length}">${items.map(renderItemInline).join('')}</td></tr>` : '');
+    </tr>` + (open ? `<tr class="detail${i % 2 ? ' alt' : ''}"><td colspan="${QUEST_COLUMNS.length}">${
+        qst.reqs.length ? `<div class="reqs">${qst.reqs.map(r => `<span class="reqline">${icon(r.skill === 'Quest' ? 'Quest point' : r.skill, '')}${esc(reqLabel(r))}${'or' in r ? ' <small>(either)</small>' : ''}</span>`).join('')}</div>` : ''
+      }${items.map(renderItemInline).join('') || '<span class="item untradeable">no items</span>'}</td></tr>` : '');
   }).join('');
 
   document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${rows}</tbody>`;
@@ -717,6 +771,8 @@ function init() {
     ingestPlayer(name, (data.players || {})[name], (data.stats || {})[name]);
   }
   state.skills = collectSkills();
+  const reqs = new Map(Object.entries(data.reqs || {}).map(([k, v]) => [norm(k), v]));
+  for (const q of state.quests) q.reqs = reqs.get(norm(q.page)) || [];
   const nq = state.quests.filter(q => q.type === 'quest').length;
   const unlinked = state.items.flatMap(it => it.needed).filter(n => !n.quest).length;
   setStatus(`${nq} quests, ${state.quests.length - nq} miniquests, ${state.items.length} items. Data fetched ${new Date(data.fetchedAt).toLocaleString()}.`

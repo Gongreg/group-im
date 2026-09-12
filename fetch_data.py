@@ -7,6 +7,7 @@
   - Quest completion per player (WikiSync; only for players with the plugin)
   - Levels and XP per player (official hiscores; live, unlike WikiSync)
   - Number of combat achievement tasks (wiki), so the stats tab can show a fraction
+  - Skill requirements per quest (from each quest page's infobox wikitext)
 
 Usage: python3 fetch_data.py
 Only stdlib is used.
@@ -249,6 +250,75 @@ def fetch_stats():
     return stats
 
 
+def quest_titles(list_html):
+    """Every quest and miniquest page title from the wiki's quest list."""
+    p = TableParser()
+    p.feed(list_html)
+    titles = []
+    for table in p.tables:
+        heads = [cell_text(c).lower() for c in table[0]] if table else []
+        col = next((i for i, h in enumerate(heads) if h.startswith("name")), None)
+        if col is None:
+            continue
+        for row in table[1:]:
+            links = [t for t in row[col] if t[0] == "link" and t[2].strip()] if len(row) > col else []
+            if links:
+                titles.append(links[0][1])
+    return list(dict.fromkeys(titles))
+
+
+SCP_RE = re.compile(r"\{\{SCP\|([^|}]+)\|(\d+)[^}]*\}\}(?:\s*\{\{Boostable\|(yes|no)[^}]*\}\})?", re.I)
+# "the sum of your [[Attack]] and [[Strength]] must be at or above 130" -> a Attack+Strength requirement
+SUM_RE = re.compile(r"sum of your \[\[(\w+)\]\] and \[\[(\w+)\]\] must be at or above (\d+)", re.I)
+
+
+def parse_reqs(wikitext):
+    """Skill requirements from the infobox's |requirements= list.
+
+    Each line is one requirement; a line offering alternatives ("40 Attack or
+    40 Strength") is tagged so the page can treat it as any-of.
+    """
+    m = re.search(r"\|\s*requirements\s*=(.*?)(?=\n\|\s*[a-z]+\s*=|\n\}\})", wikitext, re.S | re.I)
+    if not m:
+        return []
+    reqs = []
+    for n, line in enumerate(m.group(1).split("\n")):
+        found = SCP_RE.findall(line)
+        total = SUM_RE.search(line)
+        if total:
+            found.append((total.group(1) + "+" + total.group(2), total.group(3), ""))
+        for skill, level, boost in found:
+            req = {"skill": skill.strip(), "level": int(level), "boostable": boost.lower() == "yes"}
+            if len(found) > 1 and re.search(r"\bor\b", line, re.I):
+                req["or"] = n
+            reqs.append(req)
+    return reqs
+
+
+def fetch_reqs(titles):
+    """Wikitext for every quest page, reduced to its skill requirements."""
+    reqs = {}
+    for i in range(0, len(titles), 20):
+        batch = titles[i:i + 20]
+        data = api(
+            action="query", prop="revisions", rvprop="content", rvslots="main",
+            redirects="1", titles="|".join(batch),
+        )["query"]
+        alias = {m["from"]: m["to"] for m in data.get("normalized", []) + data.get("redirects", [])}
+        content = {}
+        for pg in data.get("pages", []):
+            if pg.get("revisions"):
+                content[pg["title"]] = pg["revisions"][0]["slots"]["main"]["content"]
+        for t in batch:
+            final = alias.get(alias.get(t, t), alias.get(t, t))
+            if final in content:
+                reqs[t] = parse_reqs(content[final])
+        time.sleep(0.3)
+    with_reqs = sum(1 for v in reqs.values() if v)
+    print(f"  {len(reqs)}/{len(titles)} quest pages, {with_reqs} with skill requirements")
+    return reqs
+
+
 def fetch_ca_total():
     """How many combat achievement tasks exist, from the wiki's all-tasks table."""
     p = TableParser()
@@ -263,6 +333,9 @@ def main() -> int:
 
     items = fetch_items()
     fetch_tradeability(items)
+
+    print("Fetching quest skill requirements...")
+    reqs = fetch_reqs(quest_titles(list_html))
 
     print("Fetching combat achievement count...")
     ca_total = fetch_ca_total()
@@ -281,6 +354,7 @@ def main() -> int:
         "players": players,
         "stats": stats,
         "caTotal": ca_total,
+        "reqs": reqs,
     }
     js = "window.QUEST_DATA = " + json.dumps(payload).replace("</", "<\\/") + ";\n"
     with open("data.js", "w", encoding="utf-8") as f:
