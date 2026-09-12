@@ -113,6 +113,8 @@
     color: var(--ink); background: rgba(110,80,30,.16); letter-spacing: .2px;
     border-bottom: 2px solid rgba(70,48,14,.7); box-shadow: inset 0 1px 0 rgba(255,252,238,.5); }
   th:hover { color: var(--accent); }
+  body.view-stats th[data-key=skill] { cursor: default; }
+  body.view-stats th[data-key=skill]:hover { color: var(--ink); }
   th .dir { color: var(--accent); margin-left: 4px; }
   body:not(.view-quests) tbody tr:nth-child(even) td, tr.alt td { background: rgba(96,68,22,.07); }
   tr.q.has-items { cursor: pointer; }
@@ -629,7 +631,7 @@ function summaryRows() {
 }
 
 const STATS_COLUMNS = [
-  { key: 'skill', label: 'General' },  // the default (in-game) order; clicking it restores that, but it shows no arrow
+  { key: 'skill', label: 'General' },  // not sortable; a third click on any other column returns to this order
   ...PLAYERS.map((p, i) => ({ key: 'p' + i, label: p, cls: 'lv' })),
   { key: 'low', label: 'Lowest', cls: 'lv' },
   { key: 'spread', label: 'Spread', cls: 'lv' },
@@ -763,9 +765,12 @@ document.getElementById('table').addEventListener('click', e => {
   const th = e.target.closest('th');
   if (!th) return;
   const key = th.dataset.key;
+  if (state.view === 'stats' && key === 'skill') return;  // "General" is a label, not a sort
   const s = state.sort[state.view];
-  if (s.key === key) s.dir *= -1;
-  else { s.key = key; s.dir = ['name', 'skill', 'difficulty', 'length', 'status', 'tradeable', 'reusable', 'low'].includes(key) ? 1 : -1; }
+  const first = ['name', 'difficulty', 'length', 'status', 'tradeable', 'reusable', 'low'].includes(key) ? 1 : -1;
+  if (s.key !== key) { s.key = key; s.dir = first; }
+  else if (state.view === 'stats' && s.dir === -first) { s.key = 'skill'; s.dir = 1; }  // third click: back to in-game order
+  else s.dir *= -1;
   render();
 });
 // the chosen tab survives a refresh
