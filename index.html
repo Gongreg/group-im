@@ -876,18 +876,41 @@ function ago(ms) {
   return `${Math.round(m / 1440)} days ago`;
 }
 
+// ?preview - an invented "two days ago" snapshot, so the panel can be seen before the site
+// has rebuilt; a few levels lower, a couple of quests not yet done, some counts lower
+function previewSnapshot(now) {
+  const prev = JSON.parse(JSON.stringify(now));
+  for (const p of Object.values(prev)) {
+    const top = Object.entries(p.levels).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    top.forEach(([k], i) => { p.levels[k] = Math.max(1, p.levels[k] - (3 - i)); });
+    const done = Object.keys(p.quests).filter(q => p.quests[q] === 2).sort();
+    if (done[0]) delete p.quests[done[0]];
+    if (done[1]) p.quests[done[1]] = 1;
+    const started = Object.keys(p.quests).find(q => p.quests[q] === 1);
+    if (started) delete p.quests[started];
+    Object.keys(p.activities).filter(k => p.activities[k] > 0 && !k.endsWith(' - Rank')).slice(0, 2).forEach(k => { p.activities[k] -= 1; });
+    p.diaries.pop();
+    if (p.ca > 0) p.ca -= 1;
+  }
+  return prev;
+}
+
 function renderNews(fetchedAt) {
   const el = document.getElementById('news');
-  let store = {};
-  try { store = JSON.parse(localStorage.getItem('visit') || '{}'); } catch (e) { /* ignore */ }
   const now = snapshot();
-  if (!store.cur) store = { cur: now, curAt: fetchedAt, seenAt: Date.now() };
-  else if (store.curAt !== fetchedAt) store = { prev: store.cur, prevSeenAt: store.seenAt, cur: now, curAt: fetchedAt, seenAt: Date.now() };
-  try { localStorage.setItem('visit', JSON.stringify(store)); } catch (e) { /* storage full or blocked */ }
+  const preview = /[?&]preview\b/.test(location.search);
+  let store = {};
+  if (preview) store = { prev: previewSnapshot(now), prevSeenAt: Date.now() - 2 * 86400000 };
+  else {
+    try { store = JSON.parse(localStorage.getItem('visit') || '{}'); } catch (e) { /* ignore */ }
+    if (!store.cur) store = { cur: now, curAt: fetchedAt, seenAt: Date.now() };
+    else if (store.curAt !== fetchedAt) store = { prev: store.cur, prevSeenAt: store.seenAt, cur: now, curAt: fetchedAt, seenAt: Date.now() };
+    try { localStorage.setItem('visit', JSON.stringify(store)); } catch (e) { /* storage full or blocked */ }
+  }
   const list = store.prev && !store.dismissed ? changes(store.prev, now) : [];
   el.hidden = !list.length;
   if (!list.length) return;
-  el.innerHTML = `<div class="head">Since your last visit <span class="dim">(${ago(Date.now() - store.prevSeenAt)})</span><button class="x" title="dismiss">×</button></div>`
+  el.innerHTML = `<div class="head">Since your last visit <span class="dim">(${ago(Date.now() - store.prevSeenAt)}${preview ? ' · preview' : ''})</span><button class="x" title="dismiss">×</button></div>`
     + list.map(([p, items]) => `<div class="row"><b>${esc(p)}</b>${items.join(' · ')}</div>`).join('');
   el.querySelector('.x').onclick = () => {
     store.dismissed = true;
