@@ -216,9 +216,12 @@
     vertical-align: -4px; margin-right: 7px; }
   th .icon { margin-right: 5px; }
   td.lv, th.lv { position: relative; text-align: right; font-variant-numeric: tabular-nums; }
-  /* right-anchored so each bar ends at its own number rather than the next column's */
-  td.lv .bar { position: absolute; right: 0; top: 2px; bottom: 2px; background: var(--bar); border-radius: 2px 0 0 2px; }
-  td.lv .v { position: relative; }
+  /* a bordered track across the cell, filled from the left; the number sits over its right end */
+  td.lv .track { position: absolute; left: 10px; right: 8px; top: 6px; bottom: 6px; overflow: hidden;
+    border: 1px solid rgba(80,58,26,.42); border-radius: 3px; background: rgba(255,250,235,.30);
+    box-shadow: inset 0 1px 2px rgba(80,58,26,.18); }
+  td.lv .bar { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(110,78,28,.30); }
+  td.lv .v { position: relative; padding-right: 6px; }
   td.lv .v.best { color: var(--ok); font-weight: 700; }
   td.lv .v.none { color: var(--unk); }
   td.lv .up { color: var(--ok); font-weight: 700; }
@@ -954,7 +957,7 @@ function renderStats() {
   const cell = ({ v, text, title, frac, max, best, zero }) => {
     const pct = max ? Math.max(0, Math.min(100, (v / max) * 100)) : 0;
     return `<td class="lv"${tipAttr(title)}>`
-      + (pct ? `<span class="bar" style="width:${pct.toFixed(1)}%"></span>` : '')
+      + (max ? `<span class="track"><span class="bar" style="width:${pct.toFixed(1)}%"></span></span>` : '')
       + `<span class="v${best ? ' best' : ''}${zero ? ' zero' : ''}">${esc(text)}${frac ? `<span class="frac">${esc(frac)}</span>` : ''}</span></td>`;
   };
   const blank = '<td class="lv"><span class="v none">–</span></td>';
@@ -983,7 +986,7 @@ function renderStats() {
       const name = r.link ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.label)}</a>` : esc(r.label);
       return `<tr><td>${icon(r.icon)}${name}</td>`
         + r.values.map((v, i) => v == null ? blank
-          : cell({ v, max: r.max, best: best && v === r.high, zero: v === 0, text: v.toLocaleString(), title: r.titles[i] || '' })).join('')
+          : cell({ v, max: r.max, best: best && v === r.high, zero: v === 0, text: v.toLocaleString(), frac: r.max ? '/' + r.max : '', title: r.titles[i] || '' })).join('')
         + '</tr>';
     }).join('');
   }).join('');
