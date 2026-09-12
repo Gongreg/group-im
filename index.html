@@ -582,7 +582,7 @@ function renderQuests() {
       ${cells}
       <td class="num">${qst.items.length || '–'}</td>
     </tr>` + (open ? `<tr class="detail${i % 2 ? ' alt' : ''}"><td colspan="${QUEST_COLUMNS.length}">${
-        qst.reqs.length ? `<div class="reqs">${qst.reqs.map(r => `<span class="reqline">${icon(r.skill === 'Quest' ? 'Quest point' : r.skill, '')}${esc(reqLabel(r))}${'or' in r ? ' <small>(either)</small>' : ''}</span>`).join('')}</div>` : ''
+        qst.reqs.length ? `<div class="reqs"><span class="lbl">Skills</span>${qst.reqs.map(r => `<span class="reqline">${icon(r.skill === 'Quest' ? 'Quest point' : r.skill, '')}${esc(reqLabel(r))}${'or' in r ? ' <small>(either)</small>' : ''}</span>`).join('')}</div>` : ''
       }${qst.prereqs.length ? `<div class="reqs"><span class="lbl">Quests</span>${qst.prereqs.map(p => `<span class="reqline">${questLink(p)}</span>`).join('')}</div>` : ''
       }<div class="reqs"><span class="lbl">Items</span>${items.map(renderItemInline).join('') || '<span class="item untradeable">none</span>'}</div>${renderRewards(qst)}</td></tr>` : '');
   }).join('');
