@@ -6,12 +6,11 @@
   - Tradeability of each item (wiki categories)
   - Quest completion per player (WikiSync; only for players with the plugin)
   - Levels and XP per player (official hiscores; live, unlike WikiSync)
-  - Skill icons, inlined as data URIs so the page needs no external assets
+  - Number of combat achievement tasks (wiki), so the stats tab can show a fraction
 
 Usage: python3 fetch_data.py
 Only stdlib is used.
 """
-import base64
 import json
 import re
 import sys
@@ -23,16 +22,8 @@ from html.parser import HTMLParser
 
 PLAYERS = ["gaudyk", "uncle sacks", "Moms klit", "knysliukas", "cluescrollas"]
 
-# in-game skill-tab order; index.html lays the stats table out the same way
-SKILLS = [
-    "Attack", "Hitpoints", "Mining", "Strength", "Agility", "Smithing",
-    "Defence", "Herblore", "Fishing", "Ranged", "Thieving", "Cooking",
-    "Prayer", "Crafting", "Firemaking", "Magic", "Fletching", "Woodcutting",
-    "Runecraft", "Slayer", "Farming", "Construction", "Hunter", "Sailing",
-]
 
 WIKI_API = "https://oldschool.runescape.wiki/api.php"
-WIKI_IMAGES = "https://oldschool.runescape.wiki/images/"
 SYNC_URL = "https://sync.runescape.wiki/runelite/player/{name}/STANDARD"
 HISCORES_URL = "https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player={name}"
 USER_AGENT = "osrs-quest-tracker/1.1 (personal tool for a friend group)"
@@ -258,22 +249,12 @@ def fetch_stats():
     return stats
 
 
-def fetch_icons():
-    """Skill icons from the wiki as data URIs (a few hundred bytes each)."""
-    wanted = [(s, s.replace(" ", "_") + "_icon.png") for s in SKILLS]
-    wanted.append(("Quest point", "Quest_point_icon.png"))
-    icons = {}
-    for key, filename in wanted:
-        try:
-            req = urllib.request.Request(WIKI_IMAGES + filename, headers={"User-Agent": USER_AGENT})
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                blob = resp.read()
-            icons[key] = "data:image/png;base64," + base64.b64encode(blob).decode()
-        except Exception as e:  # noqa: BLE001
-            print(f"  {filename}: {e}")
-        time.sleep(0.1)
-    print(f"  {len(icons)}/{len(wanted)} icons, {sum(map(len, icons.values())) // 1024} KB")
-    return icons
+def fetch_ca_total():
+    """How many combat achievement tasks exist, from the wiki's all-tasks table."""
+    p = TableParser()
+    p.feed(page_html("Combat Achievements/All tasks"))
+    table = max(p.tables, key=len, default=[])
+    return len([r for r in table[1:] if len(r) >= 3]) or None
 
 
 def main() -> int:
@@ -283,8 +264,9 @@ def main() -> int:
     items = fetch_items()
     fetch_tradeability(items)
 
-    print("Fetching icons...")
-    icons = fetch_icons()
+    print("Fetching combat achievement count...")
+    ca_total = fetch_ca_total()
+    print(f"  {ca_total} tasks")
 
     print("Fetching player quests...")
     players = fetch_players()
@@ -298,7 +280,7 @@ def main() -> int:
         "items": items,
         "players": players,
         "stats": stats,
-        "icons": icons,
+        "caTotal": ca_total,
     }
     js = "window.QUEST_DATA = " + json.dumps(payload).replace("</", "<\\/") + ";\n"
     with open("data.js", "w", encoding="utf-8") as f:

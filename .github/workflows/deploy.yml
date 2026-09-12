@@ -31,6 +31,9 @@ jobs:
           mkdir -p public
           cp index.html data.js public/
           cp -r assets public/
+          # unique data.js URL per deploy, so a cached copy can never be paired with a newer index.html
+          sed -i "s|src=\"data.js\"|src=\"data.js?v=${GITHUB_RUN_ID}\"|" public/index.html
+          grep -o 'data.js?v=[0-9]*' public/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

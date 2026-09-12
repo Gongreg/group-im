@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OSRS quest tracker</title>
+<title>Suldu Buldu</title>
 <style>
-  /* Textures are the real ones from the OSRS site and hiscores (see assets/);
-     paper_l/m/r.png are cut out of scroll_middle.gif - the deckled side edges are
-     only ~16px wide and smeared badly when the whole sheet was stretched to width.
+  /* Textures are the real ones from the OSRS site (see assets/). The scroll pieces
+     (roll_*.png, paper_*) are cut from backdrop_765_top/bottom.gif and backdrop_745.gif,
+     which are kept alongside as the source; stretching the whole art to table width
+     smeared the torn ends and the deckled edges.
      Type follows oldschool.runescape.com: bold Arial, white on stone, black on parchment.
      The in-game pixel font is decorative only - it is hard to read at body sizes. */
   @font-face { font-family: 'RuneScape'; src: url(assets/runescape_bold.ttf) format('truetype'); font-weight: 700; }
@@ -75,26 +76,29 @@
   #status .err { color: #ff9f8c; font-weight: 700; }
 
   /* ---- the scroll the tables sit on ---- */
-  /* Scroll: rolled ends on top at their full contrast, then the cream wash that
-     lifts only the paper, then the deckled side edges at native width so they
-     do not smear, and the paper itself stretched underneath. */
-  .wrap {
-    margin: 0 22px 44px; padding: 96px 26px 98px; overflow-x: auto;
-    background-color: #e7d9b0;
+  /* The scroll is the OSRS site's own: backdrop_745.gif for the paper and the
+     765px rolls, which overhang it by 10px a side. Cut into caps + a repeating
+     middle so it holds its shape at any table width (see assets/). */
+  .scroll {
+    position: relative; margin: 0 34px 58px; padding: 48px 30px 48px;
+    background-color: #d8c58f;
     background-image:
-      url(assets/scroll_top.gif), url(assets/scroll_bottom.gif),
-      linear-gradient(rgba(0,0,0,.20), rgba(0,0,0,0)),
-      linear-gradient(to top, rgba(0,0,0,.20), rgba(0,0,0,0)),
-      linear-gradient(rgba(255,248,226,.38), rgba(255,248,226,.38)),
-      url(assets/paper_l.png), url(assets/paper_r.png), url(assets/paper_m.png);
-    background-repeat:
-      no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat-y, repeat-y, no-repeat;
-    background-position:
-      top center, bottom center, left 78px, left bottom 78px, center, left top, right top, center;
-    background-size:
-      100% 84px, 100% 84px, 100% 18px, 100% 18px, 100% 100%, 14px auto, 14px auto, 100% 100%;
+      linear-gradient(rgba(255,249,228,.28), rgba(255,249,228,.28)),
+      url(assets/paper_l.png), url(assets/paper_r.png), url(assets/paper_m.jpg);
+    background-repeat: no-repeat, repeat-y, repeat-y, repeat;
+    background-position: center, left top, right top, center top;
     filter: drop-shadow(0 6px 14px rgba(0,0,0,.6));
   }
+  .scroll::before, .scroll::after {
+    content: ''; position: absolute; left: -10px; right: -10px; height: 50px; pointer-events: none;
+    background-image: url(assets/roll_top_l.png), url(assets/roll_top_r.png), url(assets/roll_top_m.png);
+    background-repeat: no-repeat, no-repeat, repeat-x;
+    background-position: left top, right top, left top;
+  }
+  .scroll::before { top: -11px; }
+  .scroll::after { bottom: -11px;
+    background-image: url(assets/roll_bot_l.png), url(assets/roll_bot_r.png), url(assets/roll_bot_m.png); }
+  .wrap { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; background: transparent; }
   th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: top; }
   td { font-weight: 600; }
@@ -103,7 +107,11 @@
     border-bottom: 2px solid rgba(70,48,14,.7); box-shadow: inset 0 1px 0 rgba(255,252,238,.5); }
   th:hover { color: var(--accent); }
   th .dir { color: var(--accent); margin-left: 4px; }
-  tbody tr:nth-child(even) td { background: rgba(96,68,22,.07); }
+  body:not(.view-quests) tbody tr:nth-child(even) td, tr.alt td { background: rgba(96,68,22,.07); }
+  tr.q.has-items { cursor: pointer; }
+  .tw { display: inline-block; width: 14px; color: var(--muted); font-size: 11px; }
+  tr.open td { border-bottom: none; }
+  tr.detail td { white-space: normal; padding: 0 10px 10px 34px; }
   tbody tr:hover td { background: rgba(255,246,206,.75); }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   td.st, th.st { text-align: center; }
@@ -157,7 +165,7 @@
 <body class="view-quests">
 
 <header>
-  <h1>OSRS quest tracker</h1>
+  <h1>Suldu Buldu</h1>
   <div class="players" id="players"></div>
 </header>
 
@@ -169,7 +177,7 @@
 
 <div class="controls">
   <input type="search" id="q" placeholder="Filter by name">
-  <label class="only-quests"><input type="checkbox" id="hideDone"> Hide quests everyone finished</label>
+  <label class="only-quests"><input type="checkbox" id="hideDone" checked> Hide quests everyone finished</label>
   <label class="only-quests"><input type="checkbox" id="showMini" checked> Include miniquests</label>
   <label class="only-items"><input type="checkbox" id="tradeableOnly" checked> Tradeable only</label>
   <label class="only-items"><input type="checkbox" id="hideRetired"> Hide retired</label>
@@ -181,11 +189,6 @@
     <span><span class="mark mx">–</span> no data</span>
     <span><i>italic item</i> = obtained during the quest</span>
   </span>
-  <span class="legend only-stats">
-    <span>Levels and XP come from the hiscores (live); everything else from each player's last WikiSync.</span>
-    <span><b>Lowest</b> is what gates the group, <b>spread</b> is how uneven it is.</span>
-    <span>The <b>Skill</b> column sorts in in-game order.</span>
-  </span>
   <span class="legend only-items">
     <span><span class="tag keep">Keep</span> a pending quest still needs it</span>
     <span><span class="tag skip">Skip</span> only needed where it's found in-quest</span>
@@ -196,8 +199,10 @@
 
 <div id="status">Loading…</div>
 
-<div class="wrap">
-  <table id="table"></table>
+<div class="scroll">
+  <div class="wrap">
+    <table id="table"></table>
+  </div>
 </div>
 
 <!-- Generated by fetch_data.py -->
@@ -217,14 +222,13 @@ const state = {
   players: {},       // name -> { status, quests: { normName -> 0|1|2 }, skills: { skill -> { level, xp } }, raw }
   skills: [],        // ordered skill names present in the data
   sort: { quests: { key: 'done', dir: -1 }, items: { key: 'status', dir: 1 }, stats: { key: 'skill', dir: 1 } },
-  filter: { q: '', hideDone: false, showMini: true, tradeableOnly: true, hideRetired: false, showXp: false },
+  expanded: new Set(),  // quest pages whose item list is open
+  filter: { q: '', hideDone: true, showMini: true, tradeableOnly: true, hideRetired: false, showXp: false },
 };
 
 const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-const icon = (name, alt) => {
-  const src = (window.QUEST_DATA && window.QUEST_DATA.icons || {})[name];
-  return src ? `<img class="icon" src="${src}" alt="${esc(alt == null ? name : alt)}">` : '';
-};
+const icon = (name, alt) => ICONS.has(name)
+  ? `<img class="icon" src="assets/icons/${esc(name.replace(/ /g, '_'))}.png" alt="${esc(alt == null ? name : alt)}">` : '';
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const wikiUrl = title => `${WIKI_BASE}/w/${encodeURIComponent(title.replace(/ /g, '_'))}`;
 
@@ -348,7 +352,7 @@ const QUEST_COLUMNS = [
   { key: 'qp', label: 'QP', cls: 'num', ico: 'Quest point' },
   { key: 'done', label: 'Done by', cls: 'num' },
   ...PLAYERS.map((p, i) => ({ key: 'p' + i, label: p, cls: 'st' })),
-  { key: 'items', label: 'Items required', cls: 'wrap-cell' },
+  { key: 'items', label: 'Items', cls: 'num' },
 ];
 
 function questSortValue(q, key) {
@@ -390,24 +394,26 @@ function renderQuests() {
   const head = QUEST_COLUMNS.map(c =>
     `<th class="${c.cls || ''}" data-key="${c.key}">${c.ico ? icon(c.ico, '') : ''}${esc(c.label)}${c.key === key ? `<span class="dir">${dir > 0 ? '▲' : '▼'}</span>` : ''}</th>`).join('');
 
-  const rows = list.map(qst => {
+  const rows = list.map((qst, i) => {
     const done = doneCount(qst);
     const cells = PLAYERS.map(p => {
       const [cls, sym, title] = MARK[questStatus(qst, p)];
       return `<td class="st"><span class="mark ${cls}" title="${title}">${sym}</span></td>`;
     }).join('');
-    const rowCls = [qst.type === 'miniquest' ? 'mini' : '', done === PLAYERS.length ? 'all-done' : ''].join(' ').trim();
+    const open = state.expanded.has(qst.page);
+    const rowCls = ['q', i % 2 ? 'alt' : '', qst.type === 'miniquest' ? 'mini' : '', done === PLAYERS.length ? 'all-done' : '',
+      qst.items.length ? 'has-items' : '', open ? 'open' : ''].filter(Boolean).join(' ');
     const nameCell = qst.url ? `<a href="${esc(qst.url)}" target="_blank" rel="noopener">${esc(qst.name)}</a>` : esc(qst.name);
     const items = [...qst.items].sort((a, b) => (a.acquired - b.acquired) || a.item.name.localeCompare(b.item.name));
-    return `<tr class="${rowCls}">
-      <td>${nameCell}${qst.type === 'miniquest' ? ' <small>(miniquest)</small>' : ''}</td>
+    return `<tr class="${rowCls}" data-q="${esc(qst.page)}">
+      <td><span class="tw">${qst.items.length ? (open ? '▾' : '▸') : ''}</span>${nameCell}${qst.type === 'miniquest' ? ' <small>(miniquest)</small>' : ''}</td>
       <td>${esc(qst.difficulty)}</td>
       <td>${esc(qst.length)}</td>
       <td class="num">${qst.type === 'quest' ? qst.qp : ''}</td>
       <td class="num">${done}/${PLAYERS.length}</td>
       ${cells}
-      <td class="wrap-cell">${items.map(renderItemInline).join('') || '<span class="item untradeable">–</span>'}</td>
-    </tr>`;
+      <td class="num">${qst.items.length || '–'}</td>
+    </tr>` + (open ? `<tr class="detail${i % 2 ? ' alt' : ''}"><td colspan="${QUEST_COLUMNS.length}">${items.map(renderItemInline).join('')}</td></tr>` : '');
   }).join('');
 
   document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${rows}</tbody>`;
@@ -479,6 +485,7 @@ const SKILL_ORDER = ['Attack', 'Hitpoints', 'Mining', 'Strength', 'Agility', 'Sm
   'Firemaking', 'Magic', 'Fletching', 'Woodcutting', 'Runecraft', 'Slayer', 'Farming',
   'Construction', 'Hunter', 'Sailing'];
 const MAX_LEVEL = 99;
+const ICONS = new Set([...SKILL_ORDER, 'Quest point']);
 
 const fmtXp = n => n == null ? '–'
   : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M'
@@ -505,13 +512,14 @@ function combatLevel(skills) {
   return Math.floor(base + Math.max(melee, ranged, magic));
 }
 
-// value + display for one summary row cell; null means "no data"
+// one summary row per stat; a cell is null (no data) or { v, text, title?, frac?, max? }
 function summaryRows() {
   const quests = state.quests.filter(q => q.type === 'quest');
   const totalQp = quests.reduce((n, q) => n + q.qp, 0);
+  const caTotal = (window.QUEST_DATA || {}).caTotal;
   const frac = (done, total) => ({ v: done, text: done.toLocaleString(), frac: '/' + total.toLocaleString(), max: total });
   const rows = [];
-  const add = (label, fn, note, ico) => rows.push({ label, note, ico, cells: PLAYERS.map(fn) });
+  const add = (label, fn, opts) => rows.push({ label, fmt: n => n.toLocaleString(), ...opts, cells: PLAYERS.map(fn) });
 
   add('Total level', p => {
     const r = state.players[p];
@@ -522,33 +530,33 @@ function summaryRows() {
   add('Total XP', p => {
     const r = state.players[p];
     if (!r.skills) return null;
-    const v = r.overall ? r.overall.xp : Object.values(r.skills).reduce((n, s) => n + (s.xp || 0), 0);
-    return { v, text: fmtXp(v), title: v.toLocaleString() + ' xp' };
-  });
+    const known = Object.values(r.skills).filter(s => s.xp != null);
+    const v = r.overall ? r.overall.xp : known.length ? known.reduce((n, s) => n + s.xp, 0) : null;
+    return v == null ? null : { v, text: fmtXp(v), title: v.toLocaleString() + ' xp' };
+  }, { fmt: fmtXp });
   add('Combat level', p => {
     const r = state.players[p];
     return r.skills ? { v: combatLevel(r.skills), text: String(combatLevel(r.skills)), max: 126 } : null;
   });
   add('Quests', p => {
-    const r = state.players[p];
-    if (r.status !== 'ok') return null;
+    if (state.players[p].status !== 'ok') return null;
     return frac(quests.filter(q => questStatus(q, p) === 2).length, quests.length);
   });
-  add('Quest points', p => {  // labelled with the quest point icon below
-    const r = state.players[p];
-    if (r.status !== 'ok') return null;
+  add('Quest points', p => {
+    if (state.players[p].status !== 'ok') return null;
     return frac(quests.reduce((n, q) => n + (questStatus(q, p) === 2 ? q.qp : 0), 0), totalQp);
-  }, null, 'Quest point');
+  }, { ico: 'Quest point' });
   add('Diary tiers', p => {
     const d = (state.players[p].raw || {}).achievement_diaries;
     if (!d) return null;
     let done = 0, total = 0;
     for (const region of Object.values(d)) for (const tier of Object.values(region)) { total++; if (tier.complete) done++; }
     return frac(done, total);
-  }, 'complete tiers across all 12 regions');
+  }, { note: 'complete tiers across all 12 regions' });
   add('Combat achievements', p => {
     const c = (state.players[p].raw || {}).combat_achievements;
-    return Array.isArray(c) ? { v: c.length, text: c.length.toLocaleString() } : null;
+    if (!Array.isArray(c)) return null;
+    return caTotal ? frac(c.length, caTotal) : { v: c.length, text: c.length.toLocaleString() };
   });
   add('Music tracks', p => {
     const m = (state.players[p].raw || {}).music_tracks;
@@ -616,12 +624,16 @@ function renderStats() {
   const summary = sums.map((row, i) => {
     const vals = row.cells.filter(Boolean).map(c => c.v);
     const high = vals.length ? Math.max(...vals) : null;
-    const lead = vals.length > 1 && Math.min(...vals) !== high;
+    const low = vals.length ? Math.min(...vals) : null;
+    const lead = vals.length > 1 && low !== high;
     // rows without an absolute maximum get bars scaled to the group leader
+    const rowMax = (row.cells.find(Boolean) || {}).max || high;
     return `<tr class="sum${i === sums.length - 1 ? ' last' : ''}"><td title="${esc(row.note || '')}">`
       + (row.ico ? icon(row.ico, '') : '') + `${esc(row.label)}</td>`
       + row.cells.map(c => c ? cell({ ...c, max: c.max || high, best: lead && c.v === high }) : blank).join('')
-      + '<td class="lv"></td><td class="lv"></td></tr>';
+      + (low == null ? blank + blank
+        : cell({ v: low, max: rowMax, text: row.fmt(low) }) + cell({ v: high - low, text: row.fmt(high - low) }))
+      + '</tr>';
   }).join('');
 
   const body = rows.map(r => {
@@ -658,6 +670,13 @@ function setStatus(msg, isError) {
 
 // ---------- events ----------
 document.getElementById('table').addEventListener('click', e => {
+  const row = e.target.closest('tr.q.has-items');
+  if (row && !e.target.closest('a')) {
+    const k = row.dataset.q;
+    state.expanded.has(k) ? state.expanded.delete(k) : state.expanded.add(k);
+    render();
+    return;
+  }
   const th = e.target.closest('th');
   if (!th) return;
   const key = th.dataset.key;
