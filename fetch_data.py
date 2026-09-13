@@ -39,6 +39,9 @@ SYNC_URL = "https://sync.runescape.wiki/runelite/player/{name}/STANDARD"
 HISCORES_URL = "https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player={name}"
 USER_AGENT = "osrs-quest-tracker/1.1 (personal tool for a friend group)"
 HISTORY = os.environ.get("HISTORY", "history/collection_log.json")
+DAILY = os.environ.get("DAILY", "history/daily.json")
+DAY_OFFSET = 3 * 3600  # days roll over at midnight UTC+3
+DAYS_KEPT = 7
 WIKI_CACHE = os.environ.get("WIKI_CACHE", "history/wiki_cache.json")
 WIKI_CACHE_TTL = 24 * 3600
 WIKI_CACHE_VERSION = 2  # bump when the cached shape changes, so old caches are refetched
@@ -519,6 +522,50 @@ def update_clog_history(players):
     return out
 
 
+def daily_snapshot(players, stats):
+    """What can change in a day, per player, in the shape the page diffs."""
+    snap = {}
+    for name in PLAYERS:
+        sync = players.get(name) or {}
+        st = stats.get(name) or {}
+        if not sync.get("quests") and not st.get("skills"):
+            continue
+        levels = {k: v["level"] for k, v in (st.get("skills") or {}).items()} or dict(sync.get("levels") or {})
+        diaries = [f"{region} {tier}" for region, tiers in (sync.get("achievement_diaries") or {}).items()
+                   for tier, d in tiers.items() if d.get("complete")]
+        snap[name] = {
+            "quests": {q: v for q, v in (sync.get("quests") or {}).items() if v},
+            "levels": levels,
+            "activities": dict(st.get("activities") or {}),
+            "diaries": diaries,
+            "ca": len(sync.get("combat_achievements") or []),
+        }
+    return snap
+
+
+def update_daily_history(snap):
+    """Start-of-day and latest snapshots for today, and start/end for recent days."""
+    try:
+        with open(DAILY, encoding="utf-8") as f:
+            daily = json.load(f)
+    except (OSError, ValueError):
+        daily = {"today": None, "days": []}
+    date = time.strftime("%Y-%m-%d", time.gmtime(time.time() + DAY_OFFSET))
+    today = daily.get("today")
+    if today and today["date"] != date:
+        daily["days"] = ([{"date": today["date"], "start": today["start"], "end": today["last"]}] + daily["days"])[:DAYS_KEPT]
+        today = None
+    if not today:
+        today = {"date": date, "start": snap}
+    today["last"] = snap
+    daily["today"] = today
+    os.makedirs(os.path.dirname(DAILY) or ".", exist_ok=True)
+    with open(DAILY, "w", encoding="utf-8") as f:
+        json.dump(daily, f)
+    print(f"  today is {date} (UTC+3); {len(daily['days'])} earlier days kept")
+    return {"today": {"date": date, "start": today["start"], "end": snap}, "days": daily["days"]}
+
+
 def fetch_ca_total():
     """How many combat achievement tasks exist, from the wiki's all-tasks table."""
     p = TableParser()
@@ -573,6 +620,9 @@ def main() -> int:
     print("Updating collection log history...")
     clog = update_clog_history(players)
 
+    print("Updating daily history...")
+    daily = update_daily_history(daily_snapshot(players, stats))
+
     payload = {
         "listHtml": wiki["listHtml"],
         "items": wiki["items"],
@@ -582,6 +632,7 @@ def main() -> int:
         "reqs": wiki["reqs"],
         "questInfo": wiki["questInfo"],
         "clog": clog,
+        "daily": daily,
     }
     # everything but the timestamp: the deploy is skipped when this has not changed
     digest = hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()

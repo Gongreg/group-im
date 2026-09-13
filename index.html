@@ -77,7 +77,7 @@
   .controls input[type=checkbox] { accent-color: #6b8f2c; width: 16px; height: 16px; }
   .controls .only-quests, .controls .only-items { display: none; }
   body.view-quests .only-quests, body.view-items .only-items { display: inline-flex; }
-  body.view-stats .controls, body.view-training .controls, body.view-progress .controls, body.view-clog .controls, body.view-night .controls { display: none; }
+  body.view-stats .controls, body.view-training .controls, body.view-progress .controls, body.view-clog .controls, body.view-night .controls, body.view-daily .controls { display: none; }
   button { cursor: pointer; }
   button:hover { filter: brightness(1.3); }
   .tabs button.active:hover { filter: brightness(1.6) contrast(.95); }
@@ -113,7 +113,7 @@
   table { border-collapse: collapse; width: 100%; background: transparent; }
   th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: top; }
   td { font-weight: 600; }
-  body.view-progress th, body.view-clog th, body.view-night th { cursor: default; }
+  body.view-progress th, body.view-clog th, body.view-night th, body.view-daily th { cursor: default; }
   th { position: sticky; top: 0; z-index: 1; cursor: pointer; user-select: none; font-weight: 700;
     color: var(--ink); background: rgba(110,80,30,.16); letter-spacing: .2px;
     border-bottom: 2px solid rgba(70,48,14,.7); box-shadow: inset 0 1px 0 rgba(255,252,238,.5); }
@@ -243,6 +243,13 @@
   td.rw .rwline.dim { color: var(--muted); }
   td.rw .blk { margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--line); color: var(--no); }
   td.rw .blk b { color: var(--ink); }
+  body.view-daily td { white-space: normal; vertical-align: top; }
+  body.view-daily td.who { color: var(--ink); font-weight: 700; white-space: nowrap; }
+  body.view-daily td .ok { color: var(--ok); font-weight: 700; margin-right: 3px; }
+  body.view-daily td .dim { color: var(--muted); font-weight: 400; }
+  body.view-daily td .icon { margin: 0 4px 0 1px; }
+  body.view-daily td .mark { min-width: 18px; padding: 0 4px; font-size: 11px; }
+  body.view-daily td div { padding: 1px 0; }
   tr.sum td { background: var(--sum-bg); }
   tr.sum td:first-child { font-weight: 700; }
   tr.sum.last td { border-bottom: 2px solid rgba(70,48,14,.7); }
@@ -273,6 +280,7 @@
   <button data-view="stats" class="active">Stats</button>
   <button data-view="quests">Quests</button>
   <button data-view="night">Game night</button>
+  <button data-view="daily">Daily</button>
   <button data-view="items">Items &amp; group storage</button>
   <button data-view="training">Training targets</button>
   <button data-view="progress">Progression</button>
@@ -1177,6 +1185,7 @@ function render() {
   else if (state.view === 'progress') renderProgress();
   else if (state.view === 'clog') renderClog();
   else if (state.view === 'night') renderNight();
+  else if (state.view === 'daily') renderDaily();
   else renderStats();
 }
 
@@ -1235,6 +1244,26 @@ function changes(prev, cur) {
   return out;
 }
 
+// one row per player with changes: a cell per category, one item per line
+const changeRows = (list, cols) => list.map(([p, c]) =>
+  `<tr><td class="who">${esc(p)}</td>${cols.map(([k]) => `<td>${c[k].map(l => `<div>${l}</div>`).join('') || '<span class="dim">–</span>'}</td>`).join('')}</tr>`).join('');
+
+// ---------- daily: everything each player did on a given day (days start at midnight UTC+3) ----------
+function renderDaily() {
+  const daily = (window.QUEST_DATA || {}).daily;
+  const cols = NEWS_COLUMNS;
+  const head = `<th>Player</th>${cols.map(([, label]) => `<th>${label}</th>`).join('')}`;
+  if (!daily) { document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody><tr><td colspan="5" class="dim">No daily history yet - it starts with the first build after this was added.</td></tr></tbody>`; return; }
+  const days = [{ date: daily.today.date, start: daily.today.start, end: daily.today.end, today: true }, ...daily.days];
+  const label = d => new Date(d.date + 'T12:00:00Z').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  const body = days.map(d => {
+    const list = changes(d.start, d.end);
+    return `<tr class="sec"><td colspan="${cols.length + 1}">${esc(label(d))}${d.today ? ' <small>today, so far</small>' : ''}</td></tr>`
+      + (list.length ? changeRows(list, cols) : `<tr><td colspan="${cols.length + 1}" class="dim">nothing logged</td></tr>`);
+  }).join('');
+  document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+}
+
 function ago(ms) {
   const m = Math.round(ms / 60000);
   if (m < 60) return `${Math.max(m, 1)} min ago`;
@@ -1278,9 +1307,7 @@ function renderNews(fetchedAt) {
   if (!list.length) return;
   const cols = NEWS_COLUMNS.filter(([k]) => list.some(([, c]) => c[k].length));
   el.innerHTML = `<div class="head">Since your last visit <span class="dim">(${ago(Date.now() - store.prevSeenAt)}${preview ? ' · preview' : ''})</span><button class="x" title="dismiss">×</button></div>`
-    + `<table><tr><th></th>${cols.map(([, label]) => `<th>${label}</th>`).join('')}</tr>`
-    + list.map(([p, c]) => `<tr><td class="who">${esc(p)}</td>${cols.map(([k]) => `<td>${c[k].map(l => `<div>${l}</div>`).join('') || '<span class="dim">–</span>'}</td>`).join('')}</tr>`).join('')
-    + '</table>';
+    + `<table><tr><th></th>${cols.map(([, label]) => `<th>${label}</th>`).join('')}</tr>${changeRows(list, cols)}</table>`;
   el.querySelector('.x').onclick = () => {
     store.dismissed = true;
     try { localStorage.setItem('visit', JSON.stringify(store)); } catch (e) { /* ignore */ }

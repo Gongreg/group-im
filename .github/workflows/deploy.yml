@@ -49,6 +49,7 @@ jobs:
         env:
           HISTORY: state/collection_log.json
           WIKI_CACHE: state/wiki_cache.json
+          DAILY: state/daily.json
         run: |
           python3 fetch_data.py
           # deploy when the data changed; always for a push (the code changed) or a forced dispatch
