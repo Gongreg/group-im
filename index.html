@@ -47,18 +47,10 @@
     border-image: url(assets/stone_button.gif) 10 fill / 10px / 0 round;
   }
 
-  header { padding: 20px 0 12px; display: flex; flex-wrap: wrap; gap: 12px 22px; align-items: center; }
+  header { padding: 20px 0 12px; }
   h1 { font-family: 'RuneScape', Arial, sans-serif; font-size: 32px; line-height: 1;
     -webkit-font-smoothing: none; font-smooth: never;
     margin: 0; font-weight: 700; color: #ffd964; text-shadow: 2px 2px 0 #000; }
-  .players { display: flex; flex-wrap: wrap; gap: 8px; }
-  /* player chips are information, not buttons: the site's flat black panel with a thin olive border */
-  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px 8px;
-    background: #000; border: 1px solid #5a5638; box-shadow: 0 0 0 1px #000, 0 2px 4px rgba(0,0,0,.6);
-    color: var(--white); font: 700 14px/1 Arial, Helvetica, sans-serif; text-shadow: 1px 1px 2px #000; }
-  .chip .count { color: var(--green); font-weight: 700; }
-  .chip.error { color: #ff9f8c; }
-  .chip.stale b { color: #d9c9a8; }   /* played since their last sync */
 
   .tabs { display: flex; gap: 6px; padding: 4px 0 0; }
   .tabs button { padding: 8px 14px; color: var(--dim); }
@@ -276,7 +268,6 @@
 
 <header>
   <h1>Suldu Buldu</h1>
-  <div class="players" id="players"></div>
 </header>
 
 <div class="tabs">
@@ -331,14 +322,6 @@
 <script>
 // ---------- config ----------
 const PLAYERS = ['gaudyk', 'uncle sacks', 'Moms klit', 'knysliukas', 'cluescrollas'];
-// a word or two of flair on each player's chip; the story sits in the tooltip
-const FLAIR = {
-  'gaudyk': ['Beaver dad', 'Got a beaver pet at level 40'],
-  'uncle sacks': ['Breadwinner', 'Pulled a stale baguette out of a mystery box - one of the rarest collection log items'],
-  'Moms klit': ['Beef mom', 'Has the beef pet'],
-  'knysliukas': ['Sailor moon', 'The only one with Sailing - commanding a raft'],
-  'cluescrollas': ['Just vibes', 'Nothing yet'],
-};
 const WIKI_BASE = 'https://oldschool.runescape.wiki';
 const DIFFICULTY = ['Novice', 'Intermediate', 'Experienced', 'Master', 'Grandmaster', 'Special'];
 const LENGTH = ['Very Short', 'Short', 'Medium', 'Long', 'Very Long'];
@@ -423,10 +406,9 @@ function linkItems() {
 }
 
 function ingestPlayer(name, sync, stats) {
-  const rec = { status: 'error', error: 'No WikiSync data for this player', quests: {}, raw: sync, skills: null, overall: null, activities: null, behind: null };
+  const rec = { status: 'error', quests: {}, raw: sync, skills: null, overall: null, activities: null };
   if (sync && sync.quests) {
     rec.status = 'ok';
-    rec.error = '';
     for (const [k, v] of Object.entries(sync.quests)) rec.quests[norm(k)] = v;
   }
   // Hiscores are live; WikiSync levels are only as fresh as the last plugin login.
@@ -436,11 +418,6 @@ function ingestPlayer(name, sync, stats) {
     rec.activities = stats.activities || null;
   } else if (sync && sync.levels) {
     rec.skills = Object.fromEntries(Object.entries(sync.levels).map(([k, v]) => [k, { level: v, xp: null }]));
-  }
-  // WikiSync has no "last synced" time, but its level snapshot against the live hiscores
-  // tells the same story: levels gained since the last sync mean quests and diaries may be behind
-  if (sync && sync.levels && rec.overall) {
-    rec.behind = rec.overall.level - Object.values(sync.levels).reduce((n, v) => n + v, 0);
   }
   state.players[name] = rec;
 }
@@ -523,22 +500,6 @@ function itemStatus(item) {
 }
 
 // ---------- rendering ----------
-const STALE_LEVELS = 3;  // this many levels gained since the last sync and the chip dims
-
-function renderPlayers() {
-  document.getElementById('players').innerHTML = PLAYERS.map(name => {
-    const p = state.players[name] || {};
-    const [flair, story] = FLAIR[name] || ['', ''];
-    const stale = p.behind >= STALE_LEVELS;
-    const cls = 'chip' + (p.status === 'error' ? ' error' : stale ? ' stale' : '');
-    const sync = p.behind == null ? (p.error ? `<span class="dim">${esc(p.error)}</span>` : '')
-      : p.behind > 0
-        ? `<span class="${stale ? 'no' : 'dim'}">WikiSync is ${p.behind} level${p.behind > 1 ? 's' : ''} behind the hiscores - quests and diaries may be out of date</span>`
-        : '<span class="dim">WikiSync is up to date with the hiscores</span>';
-    return `<span class="${cls}"${tipAttr([story ? esc(story) : '', sync].filter(Boolean).join('<br>'))}><b>${esc(name)}</b><span class="count">${esc(flair)}</span></span>`;
-  }).join('');
-}
-
 const MARK = { 2: ['m2', '✓', 'Completed'], 1: ['m1', '◐', 'In progress'], 0: ['m0', '✗', 'Not started'], '-1': ['mx', '–', 'No data'] };
 
 const QUEST_COLUMNS = [
@@ -1427,7 +1388,6 @@ function init() {
   if (unlinked) setStatus(`${unlinked} item→quest links could not be matched.`, true);
   else document.getElementById('status').hidden = true;
   try { setView(localStorage.getItem('view') || state.view); } catch (e) { /* storage blocked */ }
-  renderPlayers();
   render();
   renderNews(data.fetchedAt);
 }
