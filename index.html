@@ -172,11 +172,13 @@
   .legend .mark, .legend .tag { text-shadow: none; background-color: #e6d8b2; }
 
   /* ---- since your last visit ---- */
-  /* the button's riveted frame without its fill: at this size the fill's few cobblestones tile
-     into a grid, so the page's own stone shows through instead, darkened */
+  /* the button's riveted frame, but not its fill: at this size the fill's few cobblestones tile
+     into an obvious grid. Inside is the page's stone tile instead, too wide to ever repeat across
+     the panel; stone_tile_light.jpg is stone_tile.jpg with each channel scaled and shifted to the
+     button stone's mean and spread, so it keeps the button's tone */
   #news { display: block; width: fit-content; max-width: 100%; margin: 14px auto 6px; padding: 4px 8px 6px; color: var(--white);
     border: 10px solid transparent; border-image: url(assets/stone_button.gif) 10 / 10px / 0 round;
-    background: rgba(0,0,0,.35) padding-box; }
+    background: url(assets/stone_tile_light.jpg) padding-box; }
   #news[hidden] { display: none; }
   #news .head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; font-weight: 700; color: #ffd964; text-shadow: 1px 1px 2px #000; }
   #news .head .dim { font-weight: 400; }
