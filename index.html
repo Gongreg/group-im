@@ -69,7 +69,7 @@
   .controls input[type=checkbox] { accent-color: #6b8f2c; width: 16px; height: 16px; }
   .controls .only-quests, .controls .only-items { display: none; }
   body.view-quests .only-quests, body.view-items .only-items { display: inline-flex; }
-  body.view-stats .controls, body.view-training .controls, body.view-progress .controls, body.view-clog .controls, body.view-night .controls, body.view-daily .controls { display: none; }
+  body.view-stats .controls, body.view-training .controls, body.view-progress .controls, body.view-daily .controls { display: none; }
   button { cursor: pointer; }
   button:hover { filter: brightness(1.3); }
   .tabs button.active:hover { filter: brightness(1.6) contrast(.95); }
@@ -105,7 +105,7 @@
   table { border-collapse: collapse; width: 100%; background: transparent; }
   th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: top; }
   td { font-weight: 600; }
-  body.view-progress th, body.view-clog th, body.view-night th, body.view-daily th { cursor: default; }
+  body.view-progress th, body.view-daily th { cursor: default; }
   th { position: sticky; top: 0; z-index: 1; cursor: pointer; user-select: none; font-weight: 700;
     color: var(--ink); background: rgba(110,80,30,.16); letter-spacing: .2px;
     border-bottom: 2px solid rgba(70,48,14,.7); box-shadow: inset 0 1px 0 rgba(255,252,238,.5); }
@@ -229,15 +229,6 @@
   td.ms .icon { width: 22px; height: 22px; vertical-align: -6px; margin-right: 8px; }
   td.ms .how { display: block; margin-left: 30px; color: var(--muted); font-weight: 400; font-size: 12px; }
   tr.credit td { color: var(--muted); font-weight: 400; text-align: center; }
-  td.li { white-space: normal; min-width: 170px; vertical-align: middle; }
-  td.li .icon { width: 24px; height: 24px; vertical-align: -7px; margin-right: 8px; }
-  td.li .when { display: block; margin-left: 32px; color: var(--muted); font-weight: 400; font-size: 12px; }
-  td.li.none { color: var(--muted); font-weight: 400; }
-  td.rw { white-space: normal; max-width: 640px; font-weight: 400; }
-  td.rw .rwline { display: block; margin: 0; }
-  td.rw .rwline.dim { color: var(--muted); }
-  td.rw .blk { margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--line); color: var(--no); }
-  td.rw .blk b { color: var(--ink); }
   body.view-daily td { white-space: normal; vertical-align: top; }
   body.view-daily td.who { color: var(--ink); font-weight: 700; white-space: nowrap; }
   body.view-daily td .ok { color: var(--ok); font-weight: 700; margin-right: 3px; }
@@ -273,12 +264,10 @@
 <div class="tabs">
   <button data-view="stats" class="active">Stats</button>
   <button data-view="quests">Quests</button>
-  <button data-view="night">Game night</button>
   <button data-view="daily">Daily</button>
   <button data-view="items">Items &amp; group storage</button>
   <button data-view="training">Training targets</button>
   <button data-view="progress">Progression</button>
-  <button data-view="clog">Collection log</button>
 </div>
 
 <div id="news" hidden></div>
@@ -1084,71 +1073,11 @@ function renderProgress() {
   document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${summary}${body}${credit}</tbody>`;
 }
 
-// ---------- game night: quests nobody has done that everybody can start ----------
-// null = no data for the player; otherwise what stands in their way (nothing = ready)
-function canStart(q, p) {
-  const r = state.players[p];
-  if (!r.skills || r.status !== 'ok') return null;
-  const groups = reqGroups(q, p) || [];
-  const skills = groups.filter(g => !g.met);
-  const quests = q.prereqs.filter(pre => questStatus(pre, p) !== 2);
-  return { ok: !skills.length && !quests.length, skills, quests };
-}
-const groupText = g => g.reqs.map(r => `${reqLabel(r)} (has ${r.has ?? '?'})`).join(' or ');
-const blockers = st => [...st.skills.map(groupText), ...st.quests.map(pre => pre.name + ' not done')].join(', ');
-
-function renderNight() {
-  const rows = state.quests.filter(q => q.type === 'quest' && doneCount(q) === 0).map(q => ({ q, st: PLAYERS.map(p => canStart(q, p)) }));
-  const rank = (a, b) => b.q.impact.score - a.q.impact.score || LENGTH.indexOf(a.q.length) - LENGTH.indexOf(b.q.length) || a.q.name.localeCompare(b.q.name);
-  const ready = rows.filter(r => r.st.every(s => s && s.ok)).sort(rank).slice(0, 5);
-  const almost = rows.filter(r => r.st.every(Boolean) && r.st.filter(s => !s.ok).length === 1).sort(rank).slice(0, 5);
-  const noData = PLAYERS.filter(p => !state.players[p].skills || state.players[p].status !== 'ok');
-  const questRow = (r, extra = '') => `<tr><td>${questLink(r.q)}</td><td>${esc(r.q.difficulty)}</td><td>${esc(r.q.length)}</td>`
-    + `<td class="st"><span class="imp ${r.q.impact.tier}"${tipAttr(impactTip(r.q))}>${r.q.impact.score}</span></td>`
-    + `<td class="rw">${r.q.rewards.slice(0, 3).map(l => `<div class="rwline">${wikiLine(l)}</div>`).join('')}${r.q.rewards.length > 3 ? `<div class="rwline dim">+${r.q.rewards.length - 3} more</div>` : ''}`
-    + `${r.q.xp.length ? `<div class="rwline">${r.q.xp.map(([k, n]) => `${icon(k, '')}${esc(k)} <b>${n.toLocaleString()}</b>`).join(' · ')}</div>` : ''}${extra}</td></tr>`;
-  const section = (title, note) => `<tr class="sec"><td colspan="6">${title}${note ? ` <small>${note}</small>` : ''}</td></tr>`;
-  let html = `<thead><tr><th>Quest</th><th>Difficulty</th><th>Length</th><th class="st">Impact</th><th>Rewards</th></tr></thead><tbody>`;
-  html += section('Ready for all five', noData.length ? `${noData.join(', ')} ${noData.length > 1 ? 'have' : 'has'} no data, so not counted` : 'nobody has done these, everybody meets the requirements');
-  html += ready.length ? ready.map(r => questRow(r)).join('') : '<tr><td colspan="5" class="dim">Nothing right now - see who is holding what up below.</td></tr>';
-  if (almost.length) {
-    html += section('One person short', 'everyone else is ready');
-    html += almost.map(r => { const i = r.st.findIndex(s => !s.ok);
-      return questRow(r, `<div class="rwline blk"><b>${esc(PLAYERS[i])}</b> ${esc(blockers(r.st[i]))}</div>`); }).join('');
-  }
-  document.getElementById('table').innerHTML = html + '</tbody>';
-}
-
-// ---------- collection log: the last items each player gained ----------
-const RECENT = 10;
-function renderClog() {
-  const clog = (window.QUEST_DATA || {}).clog || {};
-  const head = '<th data-key="none">#</th>' + PLAYERS.map(p => {
-    const n = kcOf(p, 'Collections Logged');
-    return `<th data-key="none">${esc(p)}${n != null ? `<span class="frac"> · ${n} logged</span>` : ''}</th>`;
-  }).join('');
-  const lists = PLAYERS.map(p => (clog[p] || []).slice(0, RECENT));
-  const rows = [];
-  for (let i = 0; i < RECENT; i++) {
-    rows.push(`<tr><td class="num">${i + 1}</td>` + PLAYERS.map((p, k) => {
-      const it = lists[k][i];
-      if (!it) return i === 0 && !lists[k].length ? '<td class="li none">not synced yet - open the collection log in game and press the WikiSync button</td>' : '<td class="li"></td>';
-      const when = it.seen ? ago(Date.now() - new Date(it.seen)) : 'before tracking began';
-      const ic = it.icon ? `<img class="icon" src="${it.icon}" alt="">` : '';
-      return `<td class="li"${tipAttr(it.seen ? new Date(it.seen).toLocaleString() : 'Already in the log when tracking started')}>${ic}<a href="${esc(wikiUrl(it.name))}" target="_blank" rel="noopener">${esc(it.name)}</a><span class="when">${esc(when)}</span></td>`;
-    }).join('') + '</tr>');
-  }
-  const note = `<tr class="credit"><td colspan="${PLAYERS.length + 1}">The log syncs when a player presses WikiSync inside the collection log; the site checks hourly and notes when each new item first appears.</td></tr>`;
-  document.getElementById('table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${rows.join('')}${note}</tbody>`;
-}
-
 function render() {
   if (state.view === 'quests') renderQuests();
   else if (state.view === 'items') renderItems();
   else if (state.view === 'training') renderTraining();
   else if (state.view === 'progress') renderProgress();
-  else if (state.view === 'clog') renderClog();
-  else if (state.view === 'night') renderNight();
   else if (state.view === 'daily') renderDaily();
   else renderStats();
 }
