@@ -31,7 +31,7 @@ import urllib.parse
 import urllib.request
 from html.parser import HTMLParser
 
-PLAYERS = ["gaudyk", "uncle sacks", "Moms klit", "knysliukas", "cluescrollas"]
+PLAYERS = ["gaudyk", "uncle sacks", "slept litl", "knysliukas", "cluescrollas"]
 
 
 WIKI_API = "https://oldschool.runescape.wiki/api.php"
